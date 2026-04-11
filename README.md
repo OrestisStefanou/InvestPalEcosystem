@@ -1,5 +1,7 @@
 # InvestPalEcosystem
 
+InvestPal is an AI-powered investment advisor. You can ask it about stocks, ETFs, and crypto, get personalized advice, set reminders, and — optionally — connect your brokerage accounts to view your portfolio or place trades. It works as a pure conversational tool without any brokerage credentials.
+
 This is the entry-point repository for the InvestPal app. The app is composed of backend services and optional UI clients:
 
 **Backend (infrastructure)**
@@ -16,6 +18,35 @@ This is the entry-point repository for the InvestPal app. The app is composed of
 | Service | Repository | Port |
 |---|---|---|
 | Telegram Bot | [OrestisStefanou/InvestPalTelegramBot](https://github.com/OrestisStefanou/InvestPalTelegramBot) | 8443 |
+
+---
+
+## Features & Capabilities
+
+| Capability | Details |
+|---|---|
+| AI Investment Advisor | Powered by OpenAI, Google Gemini, or Anthropic Claude |
+| Real-time Market Data | Stocks, ETFs, crypto prices, economic indicators, commodities, market news |
+| Personalized Advice | Adapts to your risk tolerance, investment horizon, and goals |
+| Cross-session Memory | Recalls notes and context from previous conversations |
+| Reminders | Agent can create and track action items for you |
+| Alpaca Integration *(optional)* | Read your stock/ETF portfolio and place orders |
+| Coinbase Integration *(optional)* | Read your crypto portfolio and place orders |
+
+> **You do not need Alpaca or Coinbase accounts.** InvestPal is fully functional as a conversational investment research tool using only real-time market data.
+
+---
+
+## Ways to Use InvestPal
+
+Once the backend services are running you can interact with InvestPal through several front-ends:
+
+| Interface | Description | Guide |
+|---|---|---|
+| **Telegram Bot** | Chat with the advisor via the Telegram app | [docs/telegram-bot.md](docs/telegram-bot.md) |
+| **Claude Desktop** | Add InvestPal as MCP tools inside Claude Desktop | [docs/claude-desktop.md](docs/claude-desktop.md) |
+| **Streamlit Dev UI** | Simple browser-based chat UI, great for local testing | [docs/dev-ui.md](docs/dev-ui.md) |
+| **Custom UI** | Build your own client using the InvestPal REST API | [docs/custom-ui.md](docs/custom-ui.md) |
 
 ---
 
