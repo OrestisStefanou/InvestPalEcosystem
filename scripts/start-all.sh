@@ -33,7 +33,9 @@ start_service() {
 
     echo -e "  Starting ${GREEN}$name${NC}..."
     (cd "$dir" && eval "$cmd" >> "$log_file" 2>&1) &
-    echo $! > "$pid_file"
+    local pid=$!
+    disown "$pid"
+    echo "$pid" > "$pid_file"
 }
 
 # ── 1. Start backend infrastructure ─────────────────────────────────────────

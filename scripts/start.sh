@@ -35,7 +35,9 @@ start_service() {
 
     echo -e "  Starting ${GREEN}$name${NC}..."
     (cd "$dir" && eval "$cmd" >> "$log_file" 2>&1) &
-    echo $! > "$pid_file"
+    local pid=$!
+    disown "$pid"
+    echo "$pid" > "$pid_file"
 }
 
 wait_for_port() {
@@ -68,8 +70,10 @@ echo ""
 echo "Starting services..."
 
 # ── 1. MarketDataMcpServer (required by InvestPal) ───────────────────────────
+MARKET_DATA_PORT=$(grep '^PORT=' "$REPO_DIR/MarketDataMcpServer/.env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')
+MARKET_DATA_PORT="${MARKET_DATA_PORT:-8080}"
 start_service "market-data-mcp" "$REPO_DIR/MarketDataMcpServer" "make run_mcp_server"
-wait_for_port "MarketDataMcpServer" 8080
+wait_for_port "MarketDataMcpServer" "$MARKET_DATA_PORT"
 
 # ── 2. AlpacaMcpServer ───────────────────────────────────────────────────────
 start_service "alpaca-mcp" "$REPO_DIR/AlpacaMcpServer" "uv run python main.py"
@@ -90,7 +94,7 @@ echo "  Service              Port   Log"
 echo "  ─────────────────────────────────────────────────────"
 echo "  InvestPal REST API   8000   logs/investpal-api.log"
 echo "  InvestPal MCP App    9000   logs/investpal-mcp.log"
-echo "  MarketDataMcpServer  8080   logs/market-data-mcp.log"
+echo "  MarketDataMcpServer  $MARKET_DATA_PORT   logs/market-data-mcp.log"
 echo "  AlpacaMcpServer      9091   logs/alpaca-mcp.log"
 echo "  CoinbaseMcpServer    9090   logs/coinbase-mcp.log"
 echo ""
