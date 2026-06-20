@@ -2,12 +2,15 @@
 InvestPal cockpit: Claude Code SessionStart hook.
 
 Runs when a Claude Code session starts. It talks to the InvestPal MCP server
-(the single source of truth) and injects two things into the session context via
+(the single source of truth) and injects into the session context via
 `hookSpecificOutput.additionalContext`:
 
-  1. The canonical investment-advisor persona (the `get_invstment_advisor_prompt`
-     MCP prompt), so Claude Code adopts InvestPal's behaviour instead of a copy
-     that could drift from the backend.
+  1. A SHORT pointer to the canonical investment-advisor persona. The persona (the
+     `get_invstment_advisor_prompt` MCP prompt) is fetched fresh from the backend
+     and written to a file; the hook only emits the file path plus an instruction
+     to read it. This keeps additionalContext small enough to never be truncated
+     to a preview, while the full persona stays loadable on demand. (The MCP server
+     remains the single source of truth: nothing is copied into the repo.)
   2. Any scheduled workflows that are due right now, plus the exact steps for
      Claude Code to execute them (spawn a subagent, store the result, advance the
      schedule). InvestPal still owns the schedules; this hook only asks "what is
@@ -17,6 +20,10 @@ Design notes:
   - Output on stdout is ALWAYS a single valid JSON object and the process ALWAYS
     exits 0, so a backend that is down can never block a session. Failures are
     surfaced as a note inside additionalContext.
+  - The persona is written to a file rather than inlined because inlining the full
+    ~8KB prompt pushed additionalContext past Claude Code's inline-output threshold,
+    so it was truncated to a preview and most of the operating rules never reached
+    the model's context. A small pointer is guaranteed to land in full.
   - Run via the InvestPal project's uv environment (which already has `fastmcp`
     installed) so this hook needs no dependencies of its own and touches nothing
     in the nested service repos.
@@ -27,6 +34,7 @@ import datetime as dt
 import json
 import os
 import sys
+import tempfile
 
 MCP_URL = os.environ.get("INVESTPAL_MCP_URL", "http://127.0.0.1:9000/mcp")
 USER_ID = os.environ.get("INVESTPAL_USER_ID", "orestis_user_id")
@@ -76,6 +84,32 @@ def _persona_text(prompt_result) -> str:
         if text:
             parts.append(text)
     return "\n".join(parts).strip()
+
+
+def _read_session_id() -> str | None:
+    """SessionStart hooks receive a JSON payload on stdin; pull session_id if present."""
+    try:
+        raw = sys.stdin.read()
+        if not raw:
+            return None
+        payload = json.loads(raw)
+        sid = payload.get("session_id")
+        return str(sid) if sid else None
+    except Exception:  # noqa: BLE001 - stdin is best-effort; never block the session
+        return None
+
+
+def _write_persona_file(persona: str, session_id: str | None) -> str:
+    """Write the persona to a temp file and return its absolute path.
+
+    Session-scoped filename when we know the session id, so concurrent sessions do
+    not clobber each other; falls back to a fixed name otherwise.
+    """
+    name = f"investpal_persona_{session_id}.md" if session_id else "investpal_persona.md"
+    path = os.path.join(tempfile.gettempdir(), name)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(persona)
+    return path
 
 
 def _due_workflows(workflows, now):
@@ -130,7 +164,7 @@ def _workflow_instructions(due) -> str:
     return "\n".join(lines)
 
 
-async def _build_context() -> str:
+async def _build_context(session_id: str | None) -> str:
     try:
         from fastmcp import Client
     except Exception as exc:  # noqa: BLE001
@@ -177,12 +211,28 @@ async def _build_context() -> str:
     header = (
         "=== InvestPal cockpit ===\n"
         f"You are operating the InvestPal investment cockpit for the single client "
-        f"user_id=\"{USER_ID}\". Adopt the advisor persona below and use the connected "
-        "MCP tools (investpal, market-data, alpaca, coinbase).\n"
+        f"user_id=\"{USER_ID}\". Adopt the advisor persona (loaded as described below) "
+        "and use the connected MCP tools (investpal, market-data, alpaca, coinbase).\n"
     )
 
     if persona:
-        persona_block = persona
+        try:
+            persona_path = _write_persona_file(persona, session_id)
+            persona_block = (
+                "## Advisor persona — READ THIS FIRST\n\n"
+                "The canonical InvestPal advisor persona (source of truth: the investpal "
+                "MCP server) has been fetched and saved to:\n\n"
+                f"    {persona_path}\n\n"
+                "READ THIS FILE IN FULL NOW, before your first response to the client, and "
+                "adopt it as your operating instructions for the entire session. It defines "
+                "session initialization, memory rules, skills usage, trading rules, and "
+                "communication style. Do not skip it or rely on a summary."
+            )
+        except Exception as exc:  # noqa: BLE001 - fall back to inlining if the write fails
+            persona_block = (
+                f"(Could not write the persona to a file: {exc}. Persona follows inline.)\n\n"
+                f"{persona}"
+            )
     elif persona_error:
         persona_block = (
             f"(Advisor persona prompt failed to load: {persona_error}. Load it manually "
@@ -198,8 +248,9 @@ async def _build_context() -> str:
 
 
 def main() -> None:
+    session_id = _read_session_id()
     try:
-        context = asyncio.run(_build_context())
+        context = asyncio.run(_build_context(session_id))
     except Exception as exc:  # noqa: BLE001 - never let the hook crash the session
         context = f"InvestPal cockpit hook error: {exc}"
     _emit(context)

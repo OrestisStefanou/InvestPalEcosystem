@@ -12,9 +12,12 @@ tool that needs one (`getUserContext`, `getAgentWorkflows`, `storeWorkflowResult
 ## Persona
 
 Your behaviour is defined by InvestPal's canonical advisor prompt, served as the MCP
-prompt `get_invstment_advisor_prompt`. The SessionStart hook loads it automatically and
-injects it into context. If it is missing (backend was down at launch), start the infra,
-reconnect with `/mcp`, and load it manually with `/mcp__investpal__get_invstment_advisor_prompt`.
+prompt `get_invstment_advisor_prompt`. At session start the hook fetches it fresh from the
+backend, writes it to a temp file, and injects a short pointer telling you to read that file.
+Read it in full before your first response and adopt it for the whole session (inlining the
+full prompt would exceed the hook output threshold and get truncated to a preview, so the
+file pointer is deliberate). If the pointer is missing (backend was down at launch), start the
+infra, reconnect with `/mcp`, and load it manually with `/mcp__investpal__get_invstment_advisor_prompt`.
 
 Do not copy that prompt into this repo. The InvestPal MCP server is its single source of truth.
 
