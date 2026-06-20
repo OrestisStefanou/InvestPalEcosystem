@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --project \"$CLAUDE_PROJECT_DIR/InvestPal\" python3 \"$CLAUDE_PROJECT_DIR/scripts/claude_cockpit/session_start.py\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

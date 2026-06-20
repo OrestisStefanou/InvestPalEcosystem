@@ -4,3 +4,4 @@ MarketDataMcpServer/
 AlpacaMcpServer/
 CoinbaseMcpServer/
 InvestPalTelegramBot/
+scripts/claude_cockpit/__pycache__/

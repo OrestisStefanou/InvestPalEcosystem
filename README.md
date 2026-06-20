@@ -30,6 +30,7 @@ This is the entry-point repository for the InvestPal app. The app is composed of
 | Personalized Advice | Adapts to your risk tolerance, investment horizon, and goals |
 | Cross-session Memory | Recalls notes and context from previous conversations |
 | Reminders | Agent can create and track action items for you |
+| Scheduled Workflows | Cron-scheduled tasks the advisor runs on a recurring basis (e.g. weekly portfolio reviews) |
 | Alpaca Integration *(optional)* | Read your stock/ETF portfolio and place orders |
 | Coinbase Integration *(optional)* | Read your crypto portfolio and place orders |
 
@@ -44,6 +45,7 @@ Once the backend services are running you can interact with InvestPal through se
 | Interface | Description | Guide |
 |---|---|---|
 | **Telegram Bot** | Chat with the advisor via the Telegram app | [docs/telegram-bot.md](docs/telegram-bot.md) |
+| **Claude Code Cockpit** | Turn Claude Code into the advisor itself; auto-loads the persona and runs your due scheduled workflows | [docs/claude-code-cockpit.md](docs/claude-code-cockpit.md) |
 | **Claude Desktop** | Add InvestPal as MCP tools inside Claude Desktop | [docs/claude-desktop.md](docs/claude-desktop.md) |
 | **Streamlit Dev UI** | Simple browser-based chat UI, great for local testing | [docs/dev-ui.md](docs/dev-ui.md) |
 | **Custom UI** | Build your own client using the InvestPal REST API | [docs/custom-ui.md](docs/custom-ui.md) |
