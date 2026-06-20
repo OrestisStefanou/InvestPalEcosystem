@@ -115,11 +115,6 @@ Brokerage credentials are referenced from the environment in `.mcp.json`, so no 
 stored in the repo. The brokerage tools list without credentials; only calling them requires
 the keys.
 
-### Placing orders
-
-Order placement is approval-based: placing an order submits it for your approval rather than
-executing immediately. The cockpit confirms your intent before submitting any order.
-
 ---
 
 ## Troubleshooting
