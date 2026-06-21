@@ -37,7 +37,7 @@ InvestPal owns the schedules (one cron per workflow). This cockpit is the execut
 - At session start the hook surfaces any workflow that is due (`status == active` and
   `next_run_at <= now`) with run instructions. Handle those before greeting the client.
 - Mid-session, re-check with `/run-due-workflows`.
-- To run a due workflow: launch a subagent for the workflow's goal, store the report with
+- To run a due workflow: launch a subagent(in the background so that you can respond to the user fast) for the workflow's goal, store the report with
   `storeWorkflowResult`, then advance the schedule by calling `updateAgentWorkflow` with the
   SAME cron string (this recomputes `next_run_at`). The backend exposes no mark-ran tool and
   you must not modify the InvestPal repo, so this same-schedule call is the deliberate way to
