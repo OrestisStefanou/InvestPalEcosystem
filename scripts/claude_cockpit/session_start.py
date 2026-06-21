@@ -55,10 +55,14 @@ def _emit(additional_context: str) -> None:
 
 
 def _extract(result):
-    """Pull a plain Python value out of a fastmcp CallToolResult."""
-    data = getattr(result, "data", None)
-    if data is not None:
-        return data
+    """Pull a list of plain dicts out of a fastmcp CallToolResult.
+
+    Prefer `structured_content` (plain JSON dicts) over `.data`. Recent fastmcp
+    deserializes `.data` into typed model objects (e.g. `Root`) that are NOT
+    `dict` instances, and downstream callers (`_due_workflows`,
+    `_workflow_instructions`) rely on dict access — returning models silently
+    makes every workflow look not-due. `.data` is kept only as a last resort.
+    """
     structured = getattr(result, "structured_content", None) or getattr(
         result, "structuredContent", None
     )
@@ -70,9 +74,15 @@ def _extract(result):
         text = getattr(block, "text", None)
         if text:
             try:
-                return json.loads(text)
+                parsed = json.loads(text)
             except (ValueError, TypeError):
                 continue
+            if isinstance(parsed, dict) and "result" in parsed:
+                return parsed["result"]
+            return parsed
+    data = getattr(result, "data", None)
+    if data is not None:
+        return data
     return []
 
 
