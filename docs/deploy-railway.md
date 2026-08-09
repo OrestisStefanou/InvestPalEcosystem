@@ -2,6 +2,16 @@
 
 This guide walks through deploying the full InvestPal stack — including the Telegram bot — on [Railway](https://railway.app). Each service is deployed as a separate Railway service within a single project and communicates over Railway's private network.
 
+> **⚠️ This guide is out of date and has not been re-validated since InvestPal's single-user
+> migration.** It still describes a MongoDB-backed deployment. The current backend stores
+> everything in a local turso/SQLite file at `TURSO_DB_PATH`, so `MONGO_URI` / `MONGO_DB_NAME` no
+> longer exist and the MongoDB plugin step is obsolete. A container filesystem is ephemeral, so a
+> real deployment needs either a Railway volume mounted at the database path or Turso Cloud sync
+> (`TURSO_SYNC_URL`, see `InvestPal/docs/turso_sync.md`) — that choice has not been made yet.
+> `ALPHA_VANTAGE_API_KEY` is also gone: the market-data server now uses keyless sources and its
+> port is configurable via `PORT` (8082 locally). The Telegram bot additionally targets the
+> pre-migration REST shape. Treat everything below as a starting point, not a working runbook.
+
 ---
 
 ## Architecture

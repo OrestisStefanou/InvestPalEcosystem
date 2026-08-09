@@ -37,7 +37,7 @@ This gives Claude access to real-time market data and the InvestPal advisor tool
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://127.0.0.1:8080/mcp"
+        "http://127.0.0.1:8082/mcp"
       ]
     },
     "InvestPal MCP Server": {
@@ -62,7 +62,7 @@ Add the Alpaca and Coinbase entries to include brokerage tools. Credentials are 
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://127.0.0.1:8080/mcp"
+        "http://127.0.0.1:8082/mcp"
       ]
     },
     "InvestPal MCP Server": {

@@ -11,10 +11,12 @@ Runs when a Claude Code session starts. It talks to the InvestPal MCP server
      to read it. This keeps additionalContext small enough to never be truncated
      to a preview, while the full persona stays loadable on demand. (The MCP server
      remains the single source of truth: nothing is copied into the repo.)
-  2. Any scheduled workflows that are due right now, plus the exact steps for
-     Claude Code to execute them (spawn a subagent, store the result, advance the
-     schedule). InvestPal still owns the schedules; this hook only asks "what is
-     due?" and hands the work to Claude Code.
+  2. The client's profile notes and open reminders, so the first response is already
+     informed by them instead of costing a tool round-trip.
+  3. Any scheduled workflows that are due right now, plus the exact steps for
+     Claude Code to execute them (spawn a subagent, store the result). InvestPal
+     still owns the schedules; this hook only asks "what is due?" and hands the
+     work to Claude Code.
 
 Design notes:
   - Output on stdout is ALWAYS a single valid JSON object and the process ALWAYS
@@ -23,7 +25,12 @@ Design notes:
   - The persona is written to a file rather than inlined because inlining the full
     ~8KB prompt pushed additionalContext past Claude Code's inline-output threshold,
     so it was truncated to a preview and most of the operating rules never reached
-    the model's context. A small pointer is guaranteed to land in full.
+    the model's context. A small pointer is guaranteed to land in full. The profile
+    and reminder sections are inlined but budgeted (see CONTEXT_BUDGET_CHARS) for
+    the same reason: they must never grow enough to push the workflow instructions
+    out of context.
+  - InvestPal is a single-client project. Since the "Single user project migration"
+    no InvestPal MCP tool or prompt takes a `user_id`, so this hook passes none.
   - Run via the InvestPal project's uv environment (which already has `fastmcp`
     installed) so this hook needs no dependencies of its own and touches nothing
     in the nested service repos.
@@ -37,8 +44,12 @@ import sys
 import tempfile
 
 MCP_URL = os.environ.get("INVESTPAL_MCP_URL", "http://127.0.0.1:9000/mcp")
-USER_ID = os.environ.get("INVESTPAL_USER_ID", "orestis_user_id")
 PERSONA_PROMPT_NAME = "get_invstment_advisor_prompt"  # name matches the backend (typo intentional)
+
+# Combined cap for the profile + reminder sections. Both grow without bound as the
+# client is used, and additionalContext is truncated to a preview once it gets too
+# large -- which would silently drop the workflow instructions below them.
+CONTEXT_BUDGET_CHARS = 1000
 
 
 def _emit(additional_context: str) -> None:
@@ -59,7 +70,7 @@ def _extract(result):
 
     Prefer `structured_content` (plain JSON dicts) over `.data`. Recent fastmcp
     deserializes `.data` into typed model objects (e.g. `Root`) that are NOT
-    `dict` instances, and downstream callers (`_due_workflows`,
+    `dict` instances, and downstream callers (`_partition_workflows`,
     `_workflow_instructions`) rely on dict access — returning models silently
     makes every workflow look not-due. `.data` is kept only as a last resort.
     """
@@ -122,12 +133,84 @@ def _write_persona_file(persona: str, session_id: str | None) -> str:
     return path
 
 
-def _due_workflows(workflows, now):
+def _bulleted_section(title: str, bullets: list[str], empty: str, budget: int) -> str:
+    """Render a markdown section, dropping trailing bullets that exceed `budget` chars.
+
+    The count of what was dropped is reported rather than silently omitted, so a
+    truncated profile never reads as a complete one.
+    """
+    if not bullets:
+        return f"## {title}\n\n{empty}"
+
+    kept: list[str] = []
+    used = 0
+    for bullet in bullets:
+        line = f"- {bullet}"
+        if kept and used + len(line) > budget:
+            break
+        kept.append(line)
+        used += len(line)
+
+    dropped = len(bullets) - len(kept)
+    if dropped:
+        kept.append(f"- (+{dropped} more not shown here; read them with the relevant tool)")
+    return f"## {title}\n\n" + "\n".join(kept)
+
+
+def _profile_section(notes, budget: int) -> str:
+    bullets = [
+        str(note.get("note")).strip()
+        for note in notes
+        if isinstance(note, dict) and note.get("note")
+    ]
+    return _bulleted_section(
+        "Client profile",
+        bullets,
+        "No profile notes recorded yet. Build the profile with `createUserProfileNote` "
+        "as you learn durable facts about the client.",
+        budget,
+    )
+
+
+def _reminders_section(reminders, budget: int) -> str:
+    bullets = []
+    for reminder in reminders:
+        if not isinstance(reminder, dict):
+            continue
+        description = str(reminder.get("description") or "").strip()
+        if not description:
+            continue
+        due_date = reminder.get("due_date")
+        suffix = f"due {due_date}" if due_date else "no due date"
+        bullets.append(f"{description} ({suffix}) [id={reminder.get('id')}]")
+    return _bulleted_section(
+        "Open reminders",
+        bullets,
+        "No open reminders.",
+        budget,
+    )
+
+
+def _partition_workflows(workflows, now):
+    """Split workflows into (due, stuck).
+
+    Due: `active` with a `next_run_at` at or before `now`. `paused` is never run.
+
+    Stuck: anything left in `running`. The cockpit never claims the lock, so a
+    `running` row can only come from a backend run that died before storing its
+    result. Such a row is invisible to the active-only due filter forever, which is
+    why it is surfaced separately rather than ignored.
+    """
     due = []
+    stuck = []
     for wf in workflows:
         if not isinstance(wf, dict):
             continue
-        if wf.get("status") != "active":
+        status = wf.get("status")
+        if status == "running":
+            stuck.append(wf)
+            continue
+        if status != "active":
             continue
         next_run_at = wf.get("next_run_at")
         if not next_run_at:
@@ -140,12 +223,33 @@ def _due_workflows(workflows, now):
             when = when.replace(tzinfo=dt.timezone.utc)
         if when <= now:
             due.append(wf)
-    return due
+    return due, stuck
 
 
-def _workflow_instructions(due) -> str:
+def _stuck_note(stuck) -> str:
+    if not stuck:
+        return ""
+    lines = [
+        "",
+        "",
+        "### Possibly stuck runs",
+        "",
+        "These workflows are still marked `running`, which means an earlier run died "
+        "before storing a result. They will never come up as due again until the lock "
+        "is released. Tell the client, and clear each one with "
+        "`updateAgentWorkflow(workflow_id=..., status=\"active\")` when they confirm:",
+    ]
+    for wf in stuck:
+        lines.append(
+            f"- workflow_id={wf.get('workflow_id')} | name={wf.get('name')!r} | "
+            f"last_run_at={wf.get('last_run_at')}"
+        )
+    return "\n".join(lines)
+
+
+def _workflow_instructions(due, stuck) -> str:
     if not due:
-        return "## Scheduled workflows\n\nNo workflows are due right now."
+        return "## Scheduled workflows\n\nNo workflows are due right now." + _stuck_note(stuck)
 
     lines = [
         "## Scheduled workflows DUE NOW",
@@ -156,12 +260,14 @@ def _workflow_instructions(due) -> str:
         "1. Launch a subagent (Task tool) whose goal is the workflow's description. The "
         "subagent must use the InvestPal skills (`getSkillDefinitions` then `getSkill`), "
         "market-data tools, and portfolio tools as needed, and return a concise report.",
-        f"2. Persist the report: call `storeWorkflowResult` with workflow_id, user_id="
-        f"\"{USER_ID}\", the workflow_name, and output=<the report>.",
-        "3. Advance the schedule: call `updateAgentWorkflow` with user_id="
-        f"\"{USER_ID}\", the workflow_id, and schedule set to the SAME cron string shown "
-        "below. This recomputes next_run_at to the next occurrence (the backend exposes no "
-        "mark-ran tool, and the cockpit must not modify the InvestPal repo).",
+        "2. Persist the report: call `storeWorkflowResult` with the workflow_id, "
+        "workflow_name set to the workflow's name shown below, and output=<the report>.",
+        "",
+        "`storeWorkflowResult` is what COMPLETES the run: in one transaction it stores the "
+        "report, sets last_run_at, advances next_run_at from the cron schedule and releases "
+        "the running lock. So that is the only call needed — do NOT also call "
+        "`updateAgentWorkflow` to re-set the schedule, which would advance next_run_at a "
+        "second time and skip an occurrence.",
         "",
         "Workflows:",
     ]
@@ -171,7 +277,7 @@ def _workflow_instructions(due) -> str:
             f"schedule={wf.get('schedule')!r} | next_run_at={wf.get('next_run_at')}\n"
             f"  goal: {wf.get('description')}"
         )
-    return "\n".join(lines)
+    return "\n".join(lines) + _stuck_note(stuck)
 
 
 async def _build_context(session_id: str | None) -> str:
@@ -187,25 +293,36 @@ async def _build_context(session_id: str | None) -> str:
 
     persona = ""
     persona_error = None
+    profile_section = "## Client profile\n\nCould not load (see note above)."
+    reminders_section = "## Open reminders\n\nCould not load (see note above)."
     workflow_section = "## Scheduled workflows\n\nCould not check (see note above)."
 
     try:
         async with Client(MCP_URL) as client:
+            # Each call is isolated: one failing backend read degrades to a note
+            # rather than costing the session every other section.
             try:
-                prompt_result = await client.get_prompt(
-                    PERSONA_PROMPT_NAME, {"user_id": USER_ID}
-                )
+                prompt_result = await client.get_prompt(PERSONA_PROMPT_NAME)
                 persona = _persona_text(prompt_result)
             except Exception as exc:  # noqa: BLE001
                 persona_error = str(exc)
 
             try:
-                result = await client.call_tool(
-                    "getAgentWorkflows", {"user_id": USER_ID}
-                )
-                workflows = _extract(result)
+                notes = _extract(await client.call_tool("getUserProfileNotes", {}))
+                profile_section = _profile_section(notes, CONTEXT_BUDGET_CHARS // 2)
+            except Exception as exc:  # noqa: BLE001
+                profile_section = f"## Client profile\n\nCould not load profile notes: {exc}"
+
+            try:
+                reminders = _extract(await client.call_tool("getAgentReminders", {}))
+                reminders_section = _reminders_section(reminders, CONTEXT_BUDGET_CHARS // 2)
+            except Exception as exc:  # noqa: BLE001
+                reminders_section = f"## Open reminders\n\nCould not load reminders: {exc}"
+
+            try:
+                workflows = _extract(await client.call_tool("getAgentWorkflows", {}))
                 now = dt.datetime.now(dt.timezone.utc)
-                workflow_section = _workflow_instructions(_due_workflows(workflows, now))
+                workflow_section = _workflow_instructions(*_partition_workflows(workflows, now))
             except Exception as exc:  # noqa: BLE001
                 workflow_section = (
                     "## Scheduled workflows\n\nCould not list workflows: "
@@ -220,9 +337,11 @@ async def _build_context(session_id: str | None) -> str:
 
     header = (
         "=== InvestPal cockpit ===\n"
-        f"You are operating the InvestPal investment cockpit for the single client "
-        f"user_id=\"{USER_ID}\". Adopt the advisor persona (loaded as described below) "
-        "and use the connected MCP tools (investpal, market-data, alpaca, coinbase).\n"
+        "You are operating the InvestPal investment cockpit for its single client. "
+        "InvestPal is a single-user project: no InvestPal MCP tool or prompt takes a "
+        "user_id, so never pass one. Adopt the advisor persona (loaded as described "
+        "below) and use the connected MCP tools (investpal, market-data, alpaca, "
+        "coinbase).\n"
     )
 
     if persona:
@@ -254,7 +373,10 @@ async def _build_context(session_id: str | None) -> str:
             f"/mcp__investpal__{PERSONA_PROMPT_NAME}.)"
         )
 
-    return f"{header}\n{persona_block}\n\n{workflow_section}"
+    return (
+        f"{header}\n{persona_block}\n\n"
+        f"{profile_section}\n\n{reminders_section}\n\n{workflow_section}"
+    )
 
 
 def main() -> None:

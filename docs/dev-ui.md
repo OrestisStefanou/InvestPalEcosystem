@@ -27,12 +27,13 @@ pip install -r requirements.txt
 
 ## Step 2 — Configure
 
-Open `InvestPal/dev-ui/app.py` and update the two constants near the top of the file:
+Open `InvestPal/dev-ui/app.py` and update the constant near the top of the file:
 
 ```python
 BASE_URL = "http://localhost:8000"   # URL of the InvestPal REST API
-USER_ID  = "your_user_id"           # A unique identifier for your user
 ```
+
+InvestPal is single-user, so there is no user id to configure.
 
 ### Optional: brokerage credentials
 
