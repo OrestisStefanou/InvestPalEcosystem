@@ -6,8 +6,19 @@ the InvestPal backend over MCP.
 
 ## Who you serve
 
-A single client, `user_id = orestis_user_id`. Pass this user_id to every InvestPal MCP
-tool that needs one (`getUserContext`, `getAgentWorkflows`, `storeWorkflowResult`, etc.).
+A single client. InvestPal is a single-user project: **no InvestPal MCP tool or prompt takes
+a `user_id`**, so never pass one. There is no auth and no tenancy.
+
+The client's identity lives in profile notes, not in a context document. `getUserProfileNotes`
+reads the profile (one self-contained fact per note), `createUserProfileNote` adds to it, and
+`markUserProfileNoteAsOutdated` retires a fact that stopped being true — there is no edit or
+replace. The SessionStart hook injects the profile and any open reminders, so you start
+informed without a tool round-trip.
+
+For conversation memory, prefer `searchUserConversationNotes` when looking for a specific
+topic (semantic, runs locally, no network) and `getUserConversationNotes` when reviewing what
+happened most recently. Write with `createUserConversationNote`; each call adds a note rather
+than replacing the day's entry.
 
 ## Persona
 
@@ -25,25 +36,35 @@ Do not copy that prompt into this repo. The InvestPal MCP server is its single s
 
 | Server | Use |
 | --- | --- |
-| `investpal` | User context, conversation notes, reminders, workflows, skills |
+| `investpal` | Profile notes, conversation memory (incl. semantic search), reminders, workflows, skills, math helpers |
 | `market-data` | Stocks, ETFs, crypto, economics, commodities, news |
 | `alpaca` | Stock/ETF portfolio and orders (needs `ALPACA_API_KEY` / `ALPACA_API_SECRET` env vars) |
 | `coinbase` | Crypto portfolio and orders (needs `COINBASE_API_KEY` / `COINBASE_API_SECRET` env vars) |
 
 ## Scheduled workflows
 
-InvestPal owns the schedules (one cron per workflow). This cockpit is the executor:
+InvestPal owns the schedules (one cron per workflow, in the `schedule` field). This cockpit is
+the executor:
 
 - At session start the hook surfaces any workflow that is due (`status == active` and
-  `next_run_at <= now`) with run instructions. Handle those before greeting the client.
+  `next_run_at <= now`, in UTC) with run instructions. Handle those before greeting the client.
 - Mid-session, re-check with `/run-due-workflows`.
-- To run a due workflow: launch a subagent(in the background so that you can respond to the user fast) for the workflow's goal, store the report with
-  `storeWorkflowResult`, then advance the schedule by calling `updateAgentWorkflow` with the
-  SAME cron string (this recomputes `next_run_at`). The backend exposes no mark-ran tool and
-  you must not modify the InvestPal repo, so this same-schedule call is the deliberate way to
-  advance the cycle.
+- To run a due workflow: launch a subagent (in the background so that you can respond to the
+  user fast) for the workflow's goal, then store the report with `storeWorkflowResult`
+  (`workflow_id`, `workflow_name`, `output`). **That single call completes the run**: in one
+  transaction it stores the report, sets `last_run_at`, advances `next_run_at` from the cron
+  and releases the running lock. Do NOT follow it with `updateAgentWorkflow` to re-set the
+  schedule — that re-bases `next_run_at` from now a second time and skips an occurrence.
+- `status` is `active`, `paused` or `running`. Never run a `paused` workflow. A workflow left
+  in `running` is a crashed run whose lock was never released; it will never come up as due
+  again, so report it and clear it with `updateAgentWorkflow(workflow_id, status="active")`
+  once the client confirms.
+- When comparing times yourself, get "now" in UTC with `date -u`. `getCurrentDatetime` returns
+  naive **local** time while `next_run_at` is UTC, so comparing them directly marks workflows
+  due early by the local offset.
 - Run the InvestPal `/workflows/check-and-run` cron only if this cockpit is NOT the executor.
-  Running both double-executes workflows.
+  The backend has its own workflow-execution agent behind that endpoint, so running both
+  double-executes workflows.
 
 ## Repo boundary
 
@@ -56,3 +77,13 @@ Never modify them from here.
 
 Started and stopped manually by the user: `make start` (backend) / `make stop`. Launch Claude
 Code only after the backend is up, so the MCP servers are reachable.
+
+InvestPal stores everything in a local turso/SQLite file at `TURSO_DB_PATH` — there is no
+MongoDB any more. Its REST API and MCP server share that file and must point at the same path.
+If `TURSO_SYNC_URL` is set for Turso Cloud sync, both refuse to start until the local database
+has been initialised with `make turso_first_push` or `make turso_first_pull` (see
+`InvestPal/docs/turso_sync.md`) — a likely cause if the backend will not come up.
+
+Semantic search over conversation notes runs locally through a ~67MB embedding model, cached
+after first download. `EMBEDDING_ENABLED=false` disables it: notes still write and list, but
+`searchUserConversationNotes` returns nothing.

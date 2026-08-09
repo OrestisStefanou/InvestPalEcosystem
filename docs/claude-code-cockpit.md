@@ -37,9 +37,9 @@ These files make up the cockpit. They ship with the repo; you do not need to cre
 | File | Role |
 |---|---|
 | `.mcp.json` | Connects Claude Code to the four MCP servers (investpal, market-data, alpaca, coinbase) |
-| `CLAUDE.md` | The cockpit's operating contract: client `user_id`, persona source, workflow rules, repo boundary |
+| `CLAUDE.md` | The cockpit's operating contract: memory model, persona source, workflow rules, repo boundary |
 | `.claude/settings.json` | Registers the `SessionStart` hook |
-| `scripts/claude_cockpit/session_start.py` | The hook: loads the advisor persona and surfaces due workflows |
+| `scripts/claude_cockpit/session_start.py` | The hook: loads the advisor persona, the client profile and reminders, and surfaces due workflows |
 | `.claude/commands/run-due-workflows.md` | The `/run-due-workflows` command to re-check workflows mid-session |
 
 ---
@@ -60,11 +60,14 @@ cd InvestPalEcosystem
 claude
 ```
 
-On startup the `SessionStart` hook runs and injects two things into the session:
+On startup the `SessionStart` hook runs and injects three things into the session:
 
 1. **The advisor persona**, pulled live from the InvestPal MCP prompt
    `get_invstment_advisor_prompt`, so it always matches the backend (single source of truth).
-2. **Any due scheduled workflows**, with instructions for the cockpit to execute them.
+   It is written to a temp file and the hook injects the path, because inlining the full prompt
+   exceeded Claude Code's inline-output threshold and got truncated to a preview.
+2. **Your profile notes and open reminders**, so the first answer is already informed by them.
+3. **Any due scheduled workflows**, with instructions for the cockpit to execute them.
 
 Confirm the four MCP servers connected with:
 
@@ -72,13 +75,17 @@ Confirm the four MCP servers connected with:
 /mcp
 ```
 
-You should see `investpal`, `market-data`, `alpaca`, and `coinbase` listed as connected.
+You should see `investpal` and `market-data` connected. `alpaca` and `coinbase` are opt-in:
+enable them in `.claude/settings.local.json` (`enabledMcpjsonServers`) once
+`ALPACA_API_KEY` / `ALPACA_API_SECRET` and `COINBASE_API_KEY` / `COINBASE_API_SECRET` are
+exported in the shell you launch Claude Code from.
 
 ## Step 3: Use it
 
-Just talk to it. On your first message it follows the persona: loads your profile, notes, and
-reminders, surfaces anything relevant, and answers using the InvestPal skills, real-time market
-data, and (if credentials are configured) your portfolio.
+Just talk to it. Your profile and reminders are already in context from the hook; on your first
+message it follows the persona, recalls relevant past conversations (semantically, via
+`searchUserConversationNotes`), and answers using the InvestPal skills, real-time market data,
+and (if credentials are configured) your portfolio.
 
 ---
 
@@ -88,14 +95,20 @@ InvestPal owns the schedules: one cron expression per workflow, stored in the ba
 cockpit is the **executor**:
 
 - **At session start**, the hook asks the backend which workflows are due (`status == active`
-  and `next_run_at <= now`) and tells the cockpit to run them before greeting you.
+  and `next_run_at <= now`, compared in UTC) and tells the cockpit to run them before greeting
+  you.
 - **Mid-session**, run `/run-due-workflows` to check and execute again.
-- **To run one**, the cockpit launches a subagent for the workflow's goal, stores the report
-  with `storeWorkflowResult`, then advances the schedule by calling `updateAgentWorkflow` with
-  the same cron string (which recomputes `next_run_at`).
+- **To run one**, the cockpit launches a subagent for the workflow's goal and stores the report
+  with `storeWorkflowResult`. That call also *completes* the run: in one transaction it records
+  `last_run_at`, advances `next_run_at` from the cron schedule and releases the running lock.
+  Nothing else touches the schedule.
+- **A workflow stuck in `running`** is a run that died before storing a result. Its lock was
+  never released, so it will never come up as due again. The hook reports these, and they are
+  cleared with `updateAgentWorkflow(workflow_id, status="active")`.
 
 > **Avoid double execution.** When the cockpit is your executor, do not also run InvestPal's
-> own `/workflows/check-and-run` cron. Running both executes every workflow twice.
+> own `/workflows/check-and-run` cron. The backend has its own workflow-execution agent behind
+> that endpoint, so running both executes every workflow twice.
 
 The cockpit only runs workflows while a Claude Code session is open (the `SessionStart` hook is
 the trigger). It does not run them while Claude Code is closed.
@@ -106,7 +119,6 @@ the trigger). It does not run them while Claude Code is closed.
 
 | What | Where | Default |
 |---|---|---|
-| Client `user_id` | `CLAUDE.md`, and `INVESTPAL_USER_ID` env var for the hook | `orestis_user_id` |
 | InvestPal MCP URL (hook) | `INVESTPAL_MCP_URL` env var | `http://127.0.0.1:9000/mcp` |
 | Alpaca credentials | `ALPACA_API_KEY` / `ALPACA_API_SECRET` env vars (read by `.mcp.json`) | unset |
 | Coinbase credentials | `COINBASE_API_KEY` / `COINBASE_API_SECRET` env vars (read by `.mcp.json`) | unset |
@@ -123,5 +135,8 @@ the keys.
 |---|---|
 | Persona not loaded / advisor behaves generically | The backend was likely down at launch. Start it (`make start`), reconnect with `/mcp`, then load the persona manually with `/mcp__investpal__get_invstment_advisor_prompt`. |
 | `/mcp` shows a server as failed | The corresponding service is not running, or the URL/port differs from `.mcp.json`. Check `make logs`. |
+| InvestPal will not start at all | If `TURSO_SYNC_URL` is set, both InvestPal servers refuse to start until the local database is initialised with `make turso_first_push` or `make turso_first_pull` (see `InvestPal/docs/turso_sync.md`). Run `make turso_status` to see which applies. |
+| A workflow stopped running entirely | It is probably stuck in `status = running` after a crashed run. The hook reports these; clear it with `updateAgentWorkflow(workflow_id, status="active")`. |
+| `searchUserConversationNotes` returns nothing | Either `EMBEDDING_ENABLED=false`, or the notes predate the current embedding model. Run `make backfill_embeddings` in `InvestPal/`. |
 | Brokerage tool calls fail | The `ALPACA_*` / `COINBASE_*` environment variables are not set in the shell that launched Claude Code. |
 | Hook error at session start | The hook always degrades safely and prints an actionable note. Run it directly to debug: `uv run --project InvestPal python3 scripts/claude_cockpit/session_start.py`. |

@@ -43,7 +43,7 @@ start_service() {
 wait_for_port() {
     local name="$1"
     local port="$2"
-    local retries=30
+    local retries="${3:-30}"
 
     echo -n "  Waiting for $name to be ready on port $port"
     for i in $(seq 1 $retries); do
@@ -71,7 +71,7 @@ echo "Starting services..."
 
 # ── 1. MarketDataMcpServer (required by InvestPal) ───────────────────────────
 MARKET_DATA_PORT=$(grep '^PORT=' "$REPO_DIR/MarketDataMcpServer/.env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')
-MARKET_DATA_PORT="${MARKET_DATA_PORT:-8080}"
+MARKET_DATA_PORT="${MARKET_DATA_PORT:-8082}"
 start_service "market-data-mcp" "$REPO_DIR/MarketDataMcpServer" "make run_mcp_server"
 wait_for_port "MarketDataMcpServer" "$MARKET_DATA_PORT"
 
@@ -85,7 +85,15 @@ start_service "coinbase-mcp" "$REPO_DIR/CoinbaseMcpServer" "uv run main.py"
 start_service "investpal-api" "$REPO_DIR/InvestPal" "uv run fastapi run main.py"
 
 # ── 5. InvestPal MCP App ─────────────────────────────────────────────────────
+# Gated, unlike the others: Claude Code connects to this server at launch, so
+# returning before it is listening is what produces the "MCP server unreachable"
+# note in the cockpit's SessionStart hook.
+INVESTPAL_MCP_PORT=$(grep '^MCP_APP_SERVER_PORT=' "$REPO_DIR/InvestPal/.env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')
+INVESTPAL_MCP_PORT="${INVESTPAL_MCP_PORT:-9000}"
 start_service "investpal-mcp" "$REPO_DIR/InvestPal" "uv run python3 -m apps.mcp_api.app"
+# Longer timeout than the default: on a cold start this initialises the turso
+# schema, and with TURSO_SYNC_URL set it also negotiates with Turso Cloud.
+wait_for_port "InvestPal MCP App" "$INVESTPAL_MCP_PORT" 60
 
 echo ""
 echo -e "${GREEN}All services started.${NC}"
@@ -93,7 +101,7 @@ echo ""
 echo "  Service              Port   Log"
 echo "  ─────────────────────────────────────────────────────"
 echo "  InvestPal REST API   8000   logs/investpal-api.log"
-echo "  InvestPal MCP App    9000   logs/investpal-mcp.log"
+echo "  InvestPal MCP App    $INVESTPAL_MCP_PORT   logs/investpal-mcp.log"
 echo "  MarketDataMcpServer  $MARKET_DATA_PORT   logs/market-data-mcp.log"
 echo "  AlpacaMcpServer      9091   logs/alpaca-mcp.log"
 echo "  CoinbaseMcpServer    9090   logs/coinbase-mcp.log"

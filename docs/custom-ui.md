@@ -1,6 +1,8 @@
 # Building a Custom UI
 
-The InvestPal REST API is the integration point for any custom client application — a web app, mobile app, CLI tool, or anything else. You only need to call three endpoints in sequence to have a working chat loop.
+The InvestPal REST API is the integration point for any custom client application — a web app, mobile app, CLI tool, or anything else. You only need to call two endpoints in sequence to have a working chat loop.
+
+InvestPal is a **single-user** application. There is no `user_id` anywhere in the API, no user registration step, and no authentication.
 
 ---
 
@@ -14,61 +16,44 @@ The InvestPal REST API is the integration point for any custom client applicatio
 ## Integration Flow
 
 ```
-1. POST /user_context        → register the user (once, on first use)
-2. POST /session             → open a conversation session
-3. POST /chat  (loop)        → send messages and receive AI responses
+1. POST /session             → open a conversation session
+2. POST /chat  (loop)        → send messages and receive AI responses
 ```
 
 ---
 
-## Step 1 — Register the User
-
-```bash
-curl -X POST http://localhost:8000/user_context \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "alice",
-    "user_profile": {}
-  }'
-```
-
-You only need to do this once per user. The user profile (`user_profile`) can be empty initially — the advisor will populate it over time as it learns about the user.
-
----
-
-## Step 2 — Create a Session
+## Step 1 — Create a Session
 
 ```bash
 curl -X POST http://localhost:8000/session \
   -H "Content-Type: application/json" \
-  -d '{"user_id": "alice"}'
+  -d '{"name": "Portfolio review"}'
 ```
 
-The response includes a `session_id`. Store it — you will send it with every chat message.
+Both fields are optional: omit `session_id` and one is generated, omit `name` and the `session_id` is used as the name. Responds `201` with the full session; store its `session_id` and send it with every chat message. `409` means that `session_id` already exists.
 
 ---
 
-## Step 3 — Send Messages
+## Step 2 — Send Messages
 
 ```bash
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "user_id": "alice",
-    "session_id": "<session_id from step 2>",
+    "session_id": "<session_id from step 1>",
     "message": "What is the current price of Apple stock?"
   }'
 ```
 
-The response body contains the advisor's reply.
+The response body is `{"response": "..."}` with the advisor's reply. `404` means the session does not exist.
 
-Repeat this call in a loop to continue the conversation. Start a new session (step 2) whenever you want to begin a fresh conversation thread.
+Repeat this call in a loop to continue the conversation. Start a new session (step 1) whenever you want to begin a fresh conversation thread.
 
 ---
 
 ## Passing Brokerage Credentials (Optional)
 
-If you want the advisor to access a user's brokerage account, pass credentials as request headers on the `/chat` call. These are forwarded by InvestPal to the Alpaca and Coinbase MCP servers — they are never stored.
+If you want the advisor to access the brokerage account, pass credentials as request headers on the `/chat` call. These are forwarded by InvestPal to the Alpaca and Coinbase MCP servers — they are never stored.
 
 ```bash
 curl -X POST http://localhost:8000/chat \
@@ -78,13 +63,12 @@ curl -X POST http://localhost:8000/chat \
   -H "X-Coinbase-Api-Key: <coinbase key name>" \
   -H "X-Coinbase-Api-Secret: <coinbase secret>" \
   -d '{
-    "user_id": "alice",
     "session_id": "<session_id>",
     "message": "Show me my current portfolio"
   }'
 ```
 
-Omit the headers entirely to run in conversational-only mode.
+The Coinbase secret must be base64-encoded. Omit the headers entirely to run in conversational-only mode.
 
 ---
 
@@ -92,16 +76,25 @@ Omit the headers entirely to run in conversational-only mode.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/user_context/{user_id}` | Read the user's saved profile |
-| `PUT` | `/user_context` | Update the user's profile |
 | `GET` | `/session/{session_id}` | Retrieve a session with full message history |
-| `GET` | `/sessions/{user_id}` | List all sessions for a user |
+| `GET` | `/sessions` | List all sessions |
+| `GET` | `/agent_reminders` | List open reminders |
+| `POST` | `/workflows` | Create a cron-scheduled workflow (`name`, `description`, `schedule`) |
+| `GET` | `/workflows` | List workflows |
+| `PATCH` | `/workflows/{workflow_id}` | Update a workflow (`name`, `description`, `schedule`, `status`) |
+| `DELETE` | `/workflows/{workflow_id}` | Delete a workflow; its past results are kept |
+| `POST` | `/workflows/check-and-run` | Heartbeat: claim and execute any due workflows. Intended for an external cron |
+| `GET` | `/workflow_results` | Results of past workflow runs, most recent first (`?limit=10`) |
+
+The user's profile and conversation memory are not on the REST API — they are managed by the advisor itself over MCP (`getUserProfileNotes`, `createUserProfileNote`, `searchUserConversationNotes`, …). See [`InvestPal/docs/mcp_api.md`](../InvestPal/docs/mcp_api.md).
+
+> Call `POST /workflows/check-and-run` only if nothing else is executing workflows. The Claude Code cockpit executes them too; running both double-executes every workflow.
 
 ---
 
 ## Full API Reference
 
-See [`InvestPal/docs/rest_api.md`](../../InvestPal/docs/rest_api.md) for complete endpoint documentation including request/response schemas, error codes, and data types.
+See [`InvestPal/docs/rest_api.md`](../InvestPal/docs/rest_api.md) for complete endpoint documentation including request/response schemas, error codes, and data types.
 
 ---
 
@@ -112,4 +105,4 @@ The following existing clients in this repository show real-world usage patterns
 | Client | Location | Notes |
 |---|---|---|
 | Streamlit Dev UI | `InvestPal/dev-ui/app.py` | Simple Python client using `requests` |
-| Telegram Bot | `InvestPalTelegramBot/agent_service_client.py` | Async Python client with session management |
+| Telegram Bot | `InvestPalTelegramBot/investpal_client.py` | Async Python client with session management. Currently still targets the pre-migration API (`/user_context`, `user_id` params), so read it as a pattern rather than a working example |
