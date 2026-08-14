@@ -105,4 +105,3 @@ The following existing clients in this repository show real-world usage patterns
 | Client | Location | Notes |
 |---|---|---|
 | Streamlit Dev UI | `InvestPal/dev-ui/app.py` | Simple Python client using `requests` |
-| Telegram Bot | `InvestPalTelegramBot/investpal_client.py` | Async Python client with session management. Currently still targets the pre-migration API (`/user_context`, `user_id` params), so read it as a pattern rather than a working example |

@@ -70,7 +70,7 @@ the executor:
 
 Everything for this cockpit lives in `InvestPalEcosystem` (`.mcp.json`, `.claude/`, `CLAUDE.md`,
 `scripts/claude_cockpit/`). The subdirectories `InvestPal/`, `MarketDataMcpServer/`,
-`AlpacaMcpServer/`, `CoinbaseMcpServer/`, and `InvestPalTelegramBot/` are independent git repos.
+`AlpacaMcpServer/`, and `CoinbaseMcpServer/` are independent git repos.
 Never modify them from here.
 
 ## Infrastructure

@@ -2,10 +2,9 @@ REPOS := \
 	https://github.com/OrestisStefanou/InvestPal \
 	https://github.com/OrestisStefanou/MarketDataMcpServer \
 	https://github.com/OrestisStefanou/AlpacaMcpServer \
-	https://github.com/OrestisStefanou/CoinbaseMcpServer \
-	https://github.com/OrestisStefanou/InvestPalTelegramBot
+	https://github.com/OrestisStefanou/CoinbaseMcpServer
 
-.PHONY: clone pull install start start-all stop logs help \
+.PHONY: clone pull install start stop logs help \
 	turso_status turso_first_push turso_first_pull turso_push turso_pull turso_verify
 
 help:
@@ -14,8 +13,7 @@ help:
 	@echo "Usage:"
 	@echo "  make clone      Clone all service repositories"
 	@echo "  make install    Install dependencies for all services"
-	@echo "  make start      Start backend services only (infrastructure)"
-	@echo "  make start-all  Start backend + Telegram bot"
+	@echo "  make start      Start all backend services"
 	@echo "  make stop       Stop all running services"
 	@echo "  make pull       Pull latest changes in all repositories"
 	@echo "  make logs       Tail logs from all services"
@@ -66,15 +64,10 @@ install:
 	@cd $(CURDIR)/AlpacaMcpServer && uv sync
 	@echo "  CoinbaseMcpServer (Python/uv)..."
 	@cd $(CURDIR)/CoinbaseMcpServer && uv sync
-	@echo "  InvestPalTelegramBot (Python/uv)..."
-	@cd $(CURDIR)/InvestPalTelegramBot && uv sync
 	@echo "Done."
 
 start:
 	@bash scripts/start.sh
-
-start-all:
-	@bash scripts/start-all.sh
 
 stop:
 	@bash scripts/stop.sh

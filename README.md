@@ -2,9 +2,7 @@
 
 InvestPal is an AI-powered investment advisor. You can ask it about stocks, ETFs, and crypto, get personalized advice, set reminders, and — optionally — connect your brokerage accounts to view your portfolio or place trades. It works as a pure conversational tool without any brokerage credentials.
 
-This is the entry-point repository for the InvestPal app. The app is composed of backend services and optional UI clients:
-
-**Backend (infrastructure)**
+This is the entry-point repository for the InvestPal app. The app is composed of these backend services:
 
 | Service | Repository | Port |
 |---|---|---|
@@ -13,11 +11,7 @@ This is the entry-point repository for the InvestPal app. The app is composed of
 | Alpaca MCP Server | [OrestisStefanou/AlpacaMcpServer](https://github.com/OrestisStefanou/AlpacaMcpServer) | 9091 |
 | Coinbase MCP Server | [OrestisStefanou/CoinbaseMcpServer](https://github.com/OrestisStefanou/CoinbaseMcpServer) | 9090 |
 
-**UI clients (optional)**
-
-| Service | Repository | Port |
-|---|---|---|
-| Telegram Bot | [OrestisStefanou/InvestPalTelegramBot](https://github.com/OrestisStefanou/InvestPalTelegramBot) | 8443 |
+UI clients are separate; see [Ways to Use InvestPal](#ways-to-use-investpal).
 
 ---
 
@@ -44,7 +38,6 @@ Once the backend services are running you can interact with InvestPal through se
 
 | Interface | Description | Guide |
 |---|---|---|
-| **Telegram Bot** | Chat with the advisor via the Telegram app | [docs/telegram-bot.md](docs/telegram-bot.md) |
 | **Claude Code Cockpit** | Turn Claude Code into the advisor itself; auto-loads the persona and runs your due scheduled workflows | [docs/claude-code-cockpit.md](docs/claude-code-cockpit.md) |
 | **Claude Desktop** | Add InvestPal as MCP tools inside Claude Desktop | [docs/claude-desktop.md](docs/claude-desktop.md) |
 | **Streamlit Dev UI** | Simple browser-based chat UI, great for local testing | [docs/dev-ui.md](docs/dev-ui.md) |
@@ -68,9 +61,6 @@ Once the backend services are running you can interact with InvestPal through se
 - **make**
 - **nc** (netcat, used by the start script for health checks — pre-installed on macOS/Linux)
 
-For the Telegram bot only:
-- **[ngrok](https://ngrok.com/)** (or another tunneling tool) for local development — the bot uses webhooks, which require a publicly reachable HTTPS URL
-
 ---
 
 ## Setup
@@ -92,8 +82,7 @@ InvestPalEcosystem/   ← this repo
 ├── InvestPal/
 ├── MarketDataMcpServer/
 ├── AlpacaMcpServer/
-├── CoinbaseMcpServer/
-└── InvestPalTelegramBot/
+└── CoinbaseMcpServer/
 ```
 
 ### 2. Configure environment variables
@@ -190,56 +179,6 @@ EMBEDDING_CACHE_DIR=~/.cache/investpal/fastembed
 
 After the first embedding-model download, set `HF_HUB_OFFLINE=1` in your shell — otherwise huggingface_hub makes a metadata call on every model load, which stalls startup when the machine is offline.
 
-#### `InvestPalTelegramBot/.env`
-
-> **Known incompatibility.** InvestPal's single-user migration removed the `/user_context`
-> endpoints and dropped `user_id` from `POST /session` and `GET /agent_reminders`. The bot still
-> calls the old shape (`investpal_client.py`), so it needs updating in its own repo before it
-> will work against the current backend. The `INVESTPAL_USER_ID` setting below no longer
-> corresponds to anything server-side.
-
-The bot uses Telegram's webhook mechanism — Telegram pushes updates to a public HTTPS URL that you provide.
-
-**For local development**, use [ngrok](https://ngrok.com/) to expose the local webhook port:
-
-```bash
-# Install ngrok, then:
-ngrok http 8443
-# Copy the https://... URL it gives you — that becomes TELEGRAM_WEBHOOK_URL
-```
-
-```env
-# From BotFather (https://t.me/BotFather → /newbot)
-TELEGRAM_BOT_TOKEN=your_bot_token_here
-
-# Public HTTPS URL that Telegram will push updates to
-# Local dev:   use an ngrok URL, e.g. https://xxxx.ngrok-free.app
-# Production:  use your server's domain, e.g. https://myserver.example.com
-TELEGRAM_WEBHOOK_URL=https://your-ngrok-or-domain-url-here
-
-# Port the bot's webhook server listens on locally
-TELEGRAM_WEBHOOK_PORT=8443
-
-# Your Telegram user ID — the bot will only respond to this user
-# Find it by messaging @userinfobot on Telegram
-TELEGRAM_USER_ID=your_telegram_user_id
-
-# URL of the InvestPal REST API
-INVESTPAL_BACKEND_URL=http://127.0.0.1:8000
-
-# Optional: map the Telegram user to an existing InvestPal user ID.
-# If omitted, the Telegram user ID is used to create/look up the user.
-INVESTPAL_USER_ID=your_investpal_user_id
-
-# Optional: Alpaca credentials forwarded to the InvestPal agent
-ALPACA_API_KEY=your_alpaca_key
-ALPACA_API_SECRET=your_alpaca_secret
-
-# Optional: Coinbase credentials forwarded to the InvestPal agent
-COINBASE_API_KEY=your_coinbase_key_name
-COINBASE_API_SECRET=your_coinbase_key_secret
-```
-
 ### 3. Install dependencies
 
 ```bash
@@ -248,23 +187,11 @@ make install
 
 ### 4. Start services
 
-**Backend only (infrastructure):**
-
 ```bash
 make start
 ```
 
 This starts all backend services in the background. Logs are written to `logs/<service>.log`.
-
-**Backend + Telegram bot:**
-
-```bash
-make start-all
-```
-
-This starts the backend first (waiting for MarketDataMcpServer to be ready), then starts the Telegram bot.
-
-> **Note:** Make sure ngrok is already running and `TELEGRAM_WEBHOOK_URL` in `InvestPalTelegramBot/.env` points to your current ngrok URL before running `make start-all`.
 
 To stop all services:
 
@@ -295,9 +222,8 @@ make logs
 | MarketDataMcpServer | 8082 | Market data (stocks, crypto, economics, commodities, news) from keyless sources |
 | AlpacaMcpServer | 9091 | Alpaca brokerage integration at `http://localhost:9091/mcp` |
 | CoinbaseMcpServer | 9090 | Coinbase integration at `http://localhost:9090/mcp` |
-| InvestPalTelegramBot | 8443 | Telegram bot UI — webhook server (requires ngrok for local dev) |
 
-**Startup order:** MarketDataMcpServer starts first (required by InvestPal), followed by Alpaca and Coinbase servers, then the InvestPal REST API and MCP App. `make start` health-gates MarketDataMcpServer and the InvestPal MCP App, so it does not return until both are listening. The Telegram bot starts last, after the full backend is up.
+**Startup order:** MarketDataMcpServer starts first (required by InvestPal), followed by Alpaca and Coinbase servers, then the InvestPal REST API and MCP App. `make start` health-gates MarketDataMcpServer and the InvestPal MCP App, so it does not return until both are listening.
 
 **Database:** InvestPal keeps everything in a local turso/SQLite file at `TURSO_DB_PATH`, created on first start. No database server is required.
 

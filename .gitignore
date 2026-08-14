@@ -3,6 +3,5 @@ InvestPal/
 MarketDataMcpServer/
 AlpacaMcpServer/
 CoinbaseMcpServer/
-InvestPalTelegramBot/
 scripts/claude_cockpit/__pycache__/
 .DS_Store

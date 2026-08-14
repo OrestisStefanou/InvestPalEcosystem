@@ -1,6 +1,6 @@
 # Deploying InvestPal on Railway
 
-This guide walks through deploying the full InvestPal stack — including the Telegram bot — on [Railway](https://railway.app). Each service is deployed as a separate Railway service within a single project and communicates over Railway's private network.
+This guide walks through deploying the InvestPal backend stack on [Railway](https://railway.app). Each service is deployed as a separate Railway service within a single project and communicates over Railway's private network.
 
 > **⚠️ This guide is out of date and has not been re-validated since InvestPal's single-user
 > migration.** It still describes a MongoDB-backed deployment. The current backend stores
@@ -9,8 +9,8 @@ This guide walks through deploying the full InvestPal stack — including the Te
 > real deployment needs either a Railway volume mounted at the database path or Turso Cloud sync
 > (`TURSO_SYNC_URL`, see `InvestPal/docs/turso_sync.md`) — that choice has not been made yet.
 > `ALPHA_VANTAGE_API_KEY` is also gone: the market-data server now uses keyless sources and its
-> port is configurable via `PORT` (8082 locally). The Telegram bot additionally targets the
-> pre-migration REST shape. Treat everything below as a starting point, not a working runbook.
+> port is configurable via `PORT` (8082 locally). Treat everything below as a starting point, not
+> a working runbook.
 
 ---
 
@@ -22,13 +22,12 @@ Railway Project: InvestPal
 ├── market-data-mcp-server   (Go — port 8080)
 ├── alpaca-mcp-server        (Python — port 9091) [optional]
 ├── coinbase-mcp-server      (Python — port 9090) [optional]
-├── investpal                (Python/FastAPI)
-└── investpal-telegram-bot   (Python — port 8443)
+└── investpal                (Python/FastAPI)
 ```
 
-All services communicate via Railway's private network at `http://<service-name>.railway.internal:<port>`. Only `investpal-telegram-bot` requires a public domain — Telegram needs a reachable HTTPS URL to push webhook events to it.
+All services communicate via Railway's private network at `http://<service-name>.railway.internal:<port>`. No service requires a public domain.
 
-`investpal` only needs a public domain if you want to expose the REST API to external clients (e.g. a web app or third-party integrations). For personal use where the Telegram bot is the only client, it can remain fully internal.
+`investpal` only needs a public domain if you want to expose the REST API to external clients (e.g. a web app or third-party integrations). If every client reaches it from inside the Railway project, it can remain fully internal.
 
 ---
 
@@ -42,8 +41,6 @@ All services communicate via Railway's private network at `http://<service-name>
 - **Alpha Vantage** key — [alphavantage.co](https://www.alphavantage.co/support/#api-key)
 - **CoinGecko** key — [coingecko.com/en/developers/dashboard](https://www.coingecko.com/en/developers/dashboard)
 - **LLM provider** key — Anthropic, OpenAI, or Google
-- **Telegram bot token** — from [@BotFather](https://t.me/BotFather) (see [docs/telegram-bot.md](telegram-bot.md) Steps 1–2)
-- **Your Telegram user ID** — from [@userinfobot](https://t.me/userinfobot)
 - *(Optional)* Alpaca API key + secret
 - *(Optional)* Coinbase API key name + secret
 
@@ -119,7 +116,7 @@ Skip this step if you do not need Alpaca brokerage integration.
    | `MCP_PORT` | `9091` |
    | `READ_ONLY` | `False` *(set `True` to disable order placement)* |
 
-   > Alpaca credentials are **not** stored server-side. They are forwarded per-request by the Telegram bot (or any other client) via HTTP headers.
+   > Alpaca credentials are **not** stored server-side. They are forwarded per-request by the client via HTTP headers.
 
 5. Deploy and wait for **Active**.
 
@@ -157,7 +154,7 @@ This is the core service: it exposes the REST API that all UI clients talk to an
    ```
    uv run fastapi run main.py --host 0.0.0.0 --port $PORT
    ```
-4. *(Optional)* Enable a **Public Domain** (Settings → Networking → Generate Domain) if you want the REST API reachable from outside Railway — for example, to connect a web app or use the interactive docs. For personal use with the Telegram bot only, skip this; the Telegram bot reaches InvestPal over the private network.
+4. *(Optional)* Enable a **Public Domain** (Settings → Networking → Generate Domain) if you want the REST API reachable from outside Railway — for example, to connect a web app or use the interactive docs. Skip this if all clients live inside the Railway project and reach InvestPal over the private network.
 5. Add the following environment variables. Use Railway's **reference variable** syntax (`${{ServiceName.VARIABLE}}`) for values that come from other services:
 
    **MongoDB**
@@ -197,55 +194,6 @@ This is the core service: it exposes the REST API that all UI clients talk to an
    | `USER_CONTEXT_MEMORY_MANAGER_LLM_MODEL` | `claude-haiku-4-5` |
 
 6. Deploy and wait for **Active**. Verify by opening `https://<your-investpal-domain>.up.railway.app/docs` — you should see the FastAPI interactive docs.
-
----
-
-## Step 7 — Deploy InvestPalTelegramBot
-
-The Telegram bot uses webhooks: Telegram pushes incoming messages to a public HTTPS URL on the bot service. Railway provides this URL automatically.
-
-Because the webhook URL is only known after the service is first deployed, this step is a two-pass process.
-
-### Pass 1 — Deploy to get the public URL
-
-1. Click **+ New** → **GitHub Repo** → `OrestisStefanou/InvestPalTelegramBot`.
-2. Name the service **`investpal-telegram-bot`**.
-3. In **Service Settings → Deploy**, set the **Start Command**:
-   ```
-   uv run python main.py
-   ```
-4. Enable a **Public Domain** (Settings → Networking → Generate Domain). Copy the URL — it looks like `https://investpal-telegram-bot.up.railway.app`.
-5. Add these environment variables:
-
-   | Variable | Value |
-   |---|---|
-   | `PORT` | `8443` |
-   | `TELEGRAM_BOT_TOKEN` | your bot token from BotFather |
-   | `TELEGRAM_WEBHOOK_PORT` | `8443` |
-   | `TELEGRAM_WEBHOOK_URL` | `https://investpal-telegram-bot.up.railway.app` *(your domain from step 4)* |
-   | `TELEGRAM_USER_ID` | your Telegram user ID |
-   | `INVESTPAL_BACKEND_URL` | `http://investpal.railway.internal:${{investpal.PORT}}` |
-   | `INVESTPAL_USER_ID` | *(optional)* existing InvestPal user ID to map to |
-
-   **With brokerage access** *(optional — add if you want the bot to access your accounts)*:
-
-   | Variable | Value |
-   |---|---|
-   | `ALPACA_API_KEY` | your Alpaca key |
-   | `ALPACA_API_SECRET` | your Alpaca secret |
-   | `COINBASE_API_KEY` | your Coinbase key name |
-   | `COINBASE_API_SECRET` | your Coinbase key secret |
-
-6. Click **Deploy**.
-
-### Pass 2 — Set the webhook URL and redeploy
-
-If the `TELEGRAM_WEBHOOK_URL` was already set correctly in Pass 1 (you knew the domain before deploying), no second pass is needed. Otherwise, if the service deployed before you could set the URL:
-
-1. Update `TELEGRAM_WEBHOOK_URL` to match the Railway domain you copied in step 4.
-2. In the service, click **Redeploy** to apply the change.
-
-The bot registers its webhook with Telegram on startup. Once the redeploy completes and shows **Active**, open Telegram and send `/start` to your bot.
 
 ---
 
@@ -301,23 +249,6 @@ Complete listing of all variables by service.
 | `USER_CONTEXT_MEMORY_MANAGER_LLM_PROVIDER` | no | `anthropic` | Provider for the memory manager agent |
 | `USER_CONTEXT_MEMORY_MANAGER_LLM_MODEL` | no | `claude-haiku-4-5` | Model for the memory manager agent |
 
-### InvestPalTelegramBot
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `PORT` | yes | — | Must match `TELEGRAM_WEBHOOK_PORT` (set to `8443`) |
-| `TELEGRAM_BOT_TOKEN` | yes | — | Token from BotFather |
-| `TELEGRAM_WEBHOOK_URL` | yes | — | Public HTTPS Railway domain of this service |
-| `TELEGRAM_WEBHOOK_PORT` | yes | — | Port the bot listens on — set to `8443` |
-| `TELEGRAM_USER_ID` | yes | — | Telegram user ID allowed to use the bot |
-| `INVESTPAL_BACKEND_URL` | yes | — | Internal URL of the InvestPal service |
-| `INVESTPAL_USER_ID` | no | — | Map Telegram user to existing InvestPal user ID |
-| `INVESTPAL_BACKEND_TIMEOUT_MINUTES` | no | `5` | Timeout for InvestPal API requests |
-| `ALPACA_API_KEY` | no | — | Forwarded to InvestPal for brokerage access |
-| `ALPACA_API_SECRET` | no | — | Forwarded to InvestPal for brokerage access |
-| `COINBASE_API_KEY` | no | — | Forwarded to InvestPal for brokerage access |
-| `COINBASE_API_SECRET` | no | — | Forwarded to InvestPal for brokerage access |
-
 ---
 
 ## Verifying the deployment
@@ -334,18 +265,12 @@ curl https://<your-investpal-domain>.up.railway.app/docs
 
 This should return the FastAPI Swagger UI HTML. You can also browse to it in a browser. Skip this check if InvestPal is internal-only.
 
-**3. Check the Telegram bot**
-
-Open Telegram, find your bot by the username you set in BotFather, and send `/start`. The bot should respond with a welcome message.
-
 **Common issues:**
 
 | Symptom | Likely cause |
 |---|---|
 | InvestPal service crashes on startup | `MONGO_URI` incorrect or MongoDB service not yet ready |
 | InvestPal service starts but AI calls fail | MCP server URL wrong — check `MARKET_DATA_MCP_SERVER_URL` uses the correct private hostname and port |
-| Telegram bot starts but receives no messages | `TELEGRAM_WEBHOOK_URL` is wrong or not updated after deploy — redeploy after fixing the value |
-| Telegram bot responds with "Unauthorized" | `TELEGRAM_USER_ID` does not match your actual Telegram user ID |
 | AlpacaMcpServer / CoinbaseMcpServer crashes | `MCP_PORT` does not match `PORT` — both should be set to the same value (`9091` / `9090`) |
 
 ---
