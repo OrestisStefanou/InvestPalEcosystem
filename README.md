@@ -45,14 +45,6 @@ Once the backend services are running you can interact with InvestPal through se
 
 ---
 
-## Deployment
-
-| Platform | Guide |
-|---|---|
-| **Railway** | [docs/deploy-railway.md](docs/deploy-railway.md) |
-
----
-
 ## Prerequisites
 
 - **Go** 1.25+
