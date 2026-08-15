@@ -341,7 +341,7 @@ async def _build_context(session_id: str | None) -> str:
         "InvestPal is a single-user project: no InvestPal MCP tool or prompt takes a "
         "user_id, so never pass one. Adopt the advisor persona (loaded as described "
         "below) and use the connected MCP tools (investpal, market-data, alpaca, "
-        "coinbase).\n"
+        "coinbase, interactive-brokers).\n"
     )
 
     if persona:

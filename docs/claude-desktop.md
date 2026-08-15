@@ -1,13 +1,13 @@
 # Using InvestPal with Claude Desktop
 
-Claude Desktop can connect to the InvestPal backend services via the Model Context Protocol (MCP). Once configured, Claude has access to real-time market data, your investment advisor profile, reminders, and — optionally — your Alpaca and Coinbase accounts, all within the normal Claude Desktop chat interface.
+Claude Desktop can connect to the InvestPal backend services via the Model Context Protocol (MCP). Once configured, Claude has access to real-time market data, your investment advisor profile, reminders, and — optionally — your Alpaca, Coinbase and Interactive Brokers accounts, all within the normal Claude Desktop chat interface.
 
 ---
 
 ## Prerequisites
 
 - **[Claude Desktop](https://claude.ai/download)** installed
-- The InvestPal **backend services** running (see the main [README](../README.md))
+- The InvestPal **backend services** running — `make setup` from the repo root gets you there, and `make doctor` confirms it
 
 ---
 
@@ -53,7 +53,7 @@ This gives Claude access to real-time market data and the InvestPal advisor tool
 
 ### Full setup (with trading access)
 
-Add the Alpaca and Coinbase entries to include brokerage tools. Credentials are passed as request headers so they never touch the server's environment.
+Add the Alpaca, Coinbase and Interactive Brokers entries to include brokerage tools. Alpaca and Coinbase credentials are passed as request headers so they never touch the server's environment; Interactive Brokers uses no credentials at all.
 
 ```json
 {
@@ -101,12 +101,21 @@ Add the Alpaca and Coinbase entries to include brokerage tools. Credentials are 
         "API_KEY": "<your alpaca api key>",
         "API_SECRET": "<your alpaca api secret>"
       }
+    },
+    "Interactive Brokers MCP Server": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "http://127.0.0.1:9092/mcp"
+      ]
     }
   }
 }
 ```
 
-Replace the placeholder values with your actual credentials. If you only use one brokerage, simply omit the other entry.
+Replace the placeholder values with your actual credentials. If you only use one brokerage, simply omit the other entries.
+
+The Interactive Brokers entry carries no headers: it authenticates through the IB Client Portal Gateway rather than API keys. Its tools return auth errors until that gateway is running on `https://localhost:5000` and you have logged into it in a browser.
 
 ---
 
@@ -132,3 +141,4 @@ Once connected, Claude has access to:
 | InvestPal MCP Server | User profile (read/update), conversation notes (read/update), reminders (CRUD), advisor prompt |
 | Alpaca MCP Server *(optional)* | Portfolio positions, account info, order placement |
 | Coinbase MCP Server *(optional)* | Crypto portfolio, order placement |
+| Interactive Brokers MCP Server *(optional)* | Accounts, positions, balances, quotes, trades, transaction history, order placement |

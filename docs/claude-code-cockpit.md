@@ -25,7 +25,7 @@ The cockpit is configured entirely within this repo. Nothing in the nested servi
 ## Prerequisites
 
 - **[Claude Code](https://claude.com/claude-code)** installed
-- The InvestPal **backend services** running (see the main [README](../README.md))
+- The InvestPal **backend services** running — `make setup` from the repo root gets you there, and `make doctor` confirms it
 - **[uv](https://docs.astral.sh/uv/)**, used by the session-start hook to talk to the MCP server
 
 ---
@@ -36,7 +36,7 @@ These files make up the cockpit. They ship with the repo; you do not need to cre
 
 | File | Role |
 |---|---|
-| `.mcp.json` | Connects Claude Code to the four MCP servers (investpal, market-data, alpaca, coinbase) |
+| `.mcp.json` | Connects Claude Code to the five MCP servers (investpal, market-data, alpaca, coinbase, interactive-brokers) |
 | `CLAUDE.md` | The cockpit's operating contract: memory model, persona source, workflow rules, repo boundary |
 | `.claude/settings.json` | Registers the `SessionStart` hook |
 | `scripts/claude_cockpit/session_start.py` | The hook: loads the advisor persona, the client profile and reminders, and surfaces due workflows |
@@ -50,15 +50,24 @@ These files make up the cockpit. They ship with the repo; you do not need to cre
 make start
 ```
 
+First time on this machine, run `make setup` instead — it installs everything, writes your
+configuration and starts the stack in one go. See the main [README](../README.md#setup).
+
 The MCP servers must be up *before* you launch Claude Code, because Claude Code connects to
-them at startup. Wait until all services report ready (check with `make logs` if needed).
+them at startup. `make start` does not return until the InvestPal MCP app is listening, and
+`make status` shows what is up at any time.
 
 ## Step 2: Launch Claude Code from this directory
 
 ```bash
 cd InvestPalEcosystem
-claude
+make claude
 ```
+
+Use `make claude` rather than bare `claude`. It sources `.env` and `.env.secrets` before
+launching, which is what lets `.mcp.json` resolve `${ALPACA_API_KEY}` and friends into the
+request headers the brokerage servers expect. Launched without it, the brokerage tools list
+but fail when called.
 
 On startup the `SessionStart` hook runs and injects three things into the session:
 
@@ -69,16 +78,17 @@ On startup the `SessionStart` hook runs and injects three things into the sessio
 2. **Your profile notes and open reminders**, so the first answer is already informed by them.
 3. **Any due scheduled workflows**, with instructions for the cockpit to execute them.
 
-Confirm the four MCP servers connected with:
+Confirm the five MCP servers connected with:
 
 ```
 /mcp
 ```
 
-You should see `investpal` and `market-data` connected. `alpaca` and `coinbase` are opt-in:
-enable them in `.claude/settings.local.json` (`enabledMcpjsonServers`) once
-`ALPACA_API_KEY` / `ALPACA_API_SECRET` and `COINBASE_API_KEY` / `COINBASE_API_SECRET` are
-exported in the shell you launch Claude Code from.
+You should see `investpal`, `market-data` and `interactive-brokers` connected. `alpaca` and
+`coinbase` are opt-in: `make setup` enables each one in `.claude/settings.local.json` when you
+give it that brokerage's credentials, so if they are missing here you either skipped that
+question or the keys are not in `.env.secrets`. `interactive-brokers` needs no keys, but its
+tools fail until the IB Client Portal Gateway is running and logged in.
 
 ## Step 3: Use it
 
@@ -119,13 +129,16 @@ the trigger). It does not run them while Claude Code is closed.
 
 | What | Where | Default |
 |---|---|---|
+| Everything else | `.env` at the repo root, fanned out into each service at start time | see `.env.example` |
 | InvestPal MCP URL (hook) | `INVESTPAL_MCP_URL` env var | `http://127.0.0.1:9000/mcp` |
-| Alpaca credentials | `ALPACA_API_KEY` / `ALPACA_API_SECRET` env vars (read by `.mcp.json`) | unset |
-| Coinbase credentials | `COINBASE_API_KEY` / `COINBASE_API_SECRET` env vars (read by `.mcp.json`) | unset |
+| Alpaca credentials | `ALPACA_API_KEY` / `ALPACA_API_SECRET` in `.env.secrets`, exported by `make claude` | unset |
+| Coinbase credentials | `COINBASE_API_KEY` / `COINBASE_API_SECRET` in `.env.secrets`, exported by `make claude` | unset |
+| Interactive Brokers session | Browser login at `https://localhost:5000` — no keys anywhere | not authenticated |
 
-Brokerage credentials are referenced from the environment in `.mcp.json`, so no secrets are
-stored in the repo. The brokerage tools list without credentials; only calling them requires
-the keys.
+Credentials live in `.env.secrets`, which is gitignored, mode 600, and denied to the agent by
+the `permissions.deny` rules in `.claude/settings.json`. `.mcp.json` reads them from the
+environment rather than from any file, which is why `make claude` exists. The brokerage tools
+list without credentials; only calling them requires the keys.
 
 ---
 
@@ -133,10 +146,12 @@ the keys.
 
 | Symptom | Fix |
 |---|---|
+| Anything at all | Run `make doctor` first. It checks the toolchain, config coherence, port agreement with `.mcp.json`, every service, the database and secret hygiene, and prints a fix for each problem. |
 | Persona not loaded / advisor behaves generically | The backend was likely down at launch. Start it (`make start`), reconnect with `/mcp`, then load the persona manually with `/mcp__investpal__get_invstment_advisor_prompt`. |
 | `/mcp` shows a server as failed | The corresponding service is not running, or the URL/port differs from `.mcp.json`. Check `make logs`. |
 | InvestPal will not start at all | If `TURSO_SYNC_URL` is set, both InvestPal servers refuse to start until the local database is initialised with `make turso_first_push` or `make turso_first_pull` (see `InvestPal/docs/turso_sync.md`). Run `make turso_status` to see which applies. |
 | A workflow stopped running entirely | It is probably stuck in `status = running` after a crashed run. The hook reports these; clear it with `updateAgentWorkflow(workflow_id, status="active")`. |
 | `searchUserConversationNotes` returns nothing | Either `EMBEDDING_ENABLED=false`, or the notes predate the current embedding model. Run `make backfill_embeddings` in `InvestPal/`. |
-| Brokerage tool calls fail | The `ALPACA_*` / `COINBASE_*` environment variables are not set in the shell that launched Claude Code. |
+| Brokerage tool calls fail | Claude Code was launched without the credentials in its environment. Quit and relaunch with `make claude`. |
+| `interactive-brokers` tools return an auth error | The IB Client Portal Gateway is down or its session expired. `make start` reports both; open `https://localhost:5000` and log in again. |
 | Hook error at session start | The hook always degrades safely and prints an actionable note. Run it directly to debug: `uv run --project InvestPal python3 scripts/claude_cockpit/session_start.py`. |
