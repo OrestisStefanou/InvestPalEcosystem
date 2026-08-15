@@ -8,7 +8,7 @@ InvestPal is a **single-user** application. There is no `user_id` anywhere in th
 
 ## Prerequisites
 
-- The InvestPal **backend services** running (see the main [README](../README.md))
+- The InvestPal **backend services** running — `make setup` from the repo root gets you there, and `make doctor` confirms it
 - The InvestPal REST API is available at `http://localhost:8000` (interactive docs at `http://localhost:8000/docs`)
 
 ---

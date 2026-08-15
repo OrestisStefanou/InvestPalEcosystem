@@ -1,4 +1,11 @@
 {
+  "permissions": {
+    "deny": [
+      "Read(./.env.secrets)",
+      "Bash(cat *.env.secrets*)",
+      "Bash(grep * .env.secrets*)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {

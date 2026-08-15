@@ -23,6 +23,10 @@
         "X-Coinbase-Api-Key": "${COINBASE_API_KEY:-}",
         "X-Coinbase-Api-Secret": "${COINBASE_API_SECRET:-}"
       }
+    },
+    "interactive-brokers": {
+      "type": "http",
+      "url": "http://127.0.0.1:9092/mcp"
     }
   }
 }

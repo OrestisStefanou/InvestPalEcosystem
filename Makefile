@@ -2,23 +2,36 @@ REPOS := \
 	https://github.com/OrestisStefanou/InvestPal \
 	https://github.com/OrestisStefanou/MarketDataMcpServer \
 	https://github.com/OrestisStefanou/AlpacaMcpServer \
-	https://github.com/OrestisStefanou/CoinbaseMcpServer
+	https://github.com/OrestisStefanou/CoinbaseMcpServer \
+	https://github.com/OrestisStefanou/InteractiveBrokersMcpServer
 
-.PHONY: clone pull install start stop logs help \
+.PHONY: setup doctor status claude clone pull install start stop logs help \
 	turso_status turso_first_push turso_first_pull turso_push turso_pull turso_verify
 
 help:
 	@echo "InvestPal Ecosystem"
 	@echo ""
-	@echo "Usage:"
-	@echo "  make clone      Clone all service repositories"
-	@echo "  make install    Install dependencies for all services"
+	@echo "First time here:"
+	@echo "  make setup      Everything: prerequisites, clone, install, configure, start"
+	@echo "                  YES=1 to take every default, FORCE=1 to reconfigure"
+	@echo "  make claude     Launch the Claude Code cockpit with credentials loaded"
+	@echo ""
+	@echo "Day to day:"
 	@echo "  make start      Start all backend services"
 	@echo "  make stop       Stop all running services"
-	@echo "  make pull       Pull latest changes in all repositories"
+	@echo "  make status     Show which services are up"
+	@echo "  make doctor     Diagnose a broken or drifted install"
 	@echo "  make logs       Tail logs from all services"
+	@echo "  make pull       Pull latest changes in all repositories"
 	@echo ""
-	@echo "Turso Cloud sync (optional, needs TURSO_SYNC_URL in InvestPal/.env):"
+	@echo "  Configuration lives in .env (and credentials in .env.secrets),"
+	@echo "  both at the root of this repo. See .env.example."
+	@echo ""
+	@echo "Lower level:"
+	@echo "  make clone      Clone all service repositories"
+	@echo "  make install    Install dependencies for all services"
+	@echo ""
+	@echo "Turso Cloud sync (optional, needs TURSO_SYNC_URL in .env):"
 	@echo "  make turso_status      Local vs cloud state and what to run next (read-only, no network)"
 	@echo "  make turso_first_pull  Create the local database by downloading the cloud one"
 	@echo "  make turso_first_push  Seed an empty cloud database from this machine's local one"
@@ -64,7 +77,34 @@ install:
 	@cd $(CURDIR)/AlpacaMcpServer && uv sync
 	@echo "  CoinbaseMcpServer (Python/uv)..."
 	@cd $(CURDIR)/CoinbaseMcpServer && uv sync
+	@if [ -d "$(CURDIR)/InteractiveBrokersMcpServer" ]; then \
+		echo "  InteractiveBrokersMcpServer (Python/uv)..."; \
+		cd $(CURDIR)/InteractiveBrokersMcpServer && uv sync; \
+	fi
 	@echo "Done."
+
+setup:
+	@bash scripts/setup.sh
+
+doctor:
+	@bash scripts/doctor.sh
+
+status:
+	@bash scripts/status.sh
+
+# Launch Claude Code with the root config loaded. .mcp.json interpolates
+# ${ALPACA_API_KEY} and friends from the environment, which a file on disk does
+# not populate on its own — this is what closes that gap.
+claude:
+	@if [ ! -f "$(CURDIR)/.env" ]; then \
+		echo "No .env found. Run 'make setup' first."; exit 1; \
+	fi
+	@if ! command -v claude >/dev/null 2>&1; then \
+		echo "The 'claude' CLI is not on PATH. See https://claude.com/claude-code"; exit 1; \
+	fi
+	@set -a; . "$(CURDIR)/.env"; \
+		[ -f "$(CURDIR)/.env.secrets" ] && . "$(CURDIR)/.env.secrets"; \
+		set +a; exec claude
 
 start:
 	@bash scripts/start.sh

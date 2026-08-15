@@ -1,23 +1,8 @@
 #!/usr/bin/env bash
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(dirname "$SCRIPT_DIR")"
-LOG_DIR="$REPO_DIR/logs"
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-NC='\033[0m'
-
-# Kill a process and all its descendants recursively
-kill_tree() {
-    local pid="$1"
-    local children
-    children=$(pgrep -P "$pid" 2>/dev/null) || true
-    for child in $children; do
-        kill_tree "$child"
-    done
-    kill "$pid" 2>/dev/null || true
-}
+# shellcheck source=lib.sh
+. "$SCRIPT_DIR/lib.sh"
 
 if [ ! -d "$LOG_DIR" ] || [ -z "$(ls "$LOG_DIR"/*.pid 2>/dev/null)" ]; then
     echo "No running services found."

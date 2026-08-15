@@ -6,7 +6,7 @@ The dev UI is a browser-based chat console bundled with the InvestPal service. I
 
 ## Prerequisites
 
-- The InvestPal **backend services** running (see the main [README](../README.md))
+- The InvestPal **backend services** running — `make setup` from the repo root gets you there, and `make doctor` confirms it
 - **Python 3.13+**
 
 ---
