@@ -414,38 +414,118 @@ configure_brokers() {
     fi
 }
 
+# Asked here, before anything starts a service, because the first start creates
+# investpal.db — and a local file, however empty, is what stops turso_first_pull
+# from being able to run. Turning sync on afterwards used to leave a second
+# machine with no supported way to adopt the cloud database.
+configure_turso_sync() {
+    if [ -n "$TURSO_SYNC_URL" ] && [ "$FORCE" != "1" ]; then
+        ok "Turso Cloud sync" "configured"
+        return 0
+    fi
+
+    echo ""
+    note "Turso Cloud sync keeps this machine's database in step with a cloud copy,"
+    note "so a second device can pick up the same notes, reminders and workflows."
+    note "Skip it if this is your only machine: the local file works on its own."
+    if ! ask_yn "Sync the database to Turso Cloud?" "n"; then
+        ok "Turso Cloud sync" "off (local file only)"
+        return 0
+    fi
+
+    local url token client
+    ask url "Turso database URL (libsql://...)" "$TURSO_SYNC_URL"
+    if [ -z "$url" ]; then
+        warn "Turso Cloud sync" "no URL given, left off"
+        note "Set TURSO_SYNC_URL in .env later and re-run 'make setup'."
+        return 0
+    fi
+    ask_secret token "Turso auth token (not echoed)"
+    ask client "Name for this device" "investpal-$(hostname -s 2>/dev/null || echo local)"
+
+    set_kv "$ENV_FILE" TURSO_SYNC_URL "$url"
+    set_kv "$ENV_FILE" TURSO_SYNC_CLIENT_NAME "$client"
+    if [ -n "$token" ]; then
+        set_kv "$SECRETS_FILE" TURSO_SYNC_AUTH_TOKEN "$token"
+        ok "Turso Cloud sync" "configured as $client"
+    else
+        warn "Turso Cloud sync" "configured without a token"
+        note "Add TURSO_SYNC_AUTH_TOKEN to .env.secrets before syncing."
+    fi
+
+    # prepare_data runs next and reads both from the environment.
+    load_env
+}
+
 optional_integrations() {
     phase "Optional integrations"
     configure_backend_agent
     configure_brokers
+    configure_turso_sync
 }
 
 # ── 6. Database and embedding model ──────────────────────────────────────────
+
+# Run one of the root turso targets, non-interactively when setup itself is.
+# Deliberately not fatal under `set -e`: a sync that will not complete is worth
+# reporting next to everything else rather than aborting a setup that got the
+# whole ecosystem installed. `make doctor` picks the same problem up afterwards.
+turso_make() { # turso_make TARGET [VAR=VALUE ...]
+    local target="$1"; shift
+    if make -C "$REPO_DIR" --no-print-directory "$target" YES="$YES" "$@"; then
+        return 0
+    fi
+    bad "Turso Cloud sync" "$target did not complete"
+    note "Nothing was deleted. Run 'make doctor' for the current state."
+    return 0
+}
 
 prepare_data() {
     phase "Database and search index"
 
     if [ -n "$TURSO_SYNC_URL" ]; then
-        local state
-        state=$(make -C "$REPO_DIR/InvestPal" --no-print-directory turso_status 2>&1) || true
-        case "$state" in
-            *local_only*)
-                warn "Turso Cloud sync" "local database not yet pushed"
-                note "Both InvestPal processes refuse to start until this is done."
-                ask_yn "Run 'make turso_first_push' now?" "y" && \
-                    make -C "$REPO_DIR" --no-print-directory turso_first_push
+        # State comes from the files (lib.sh), not from parsing `turso_status`.
+        # That call ran InvestPal's make without the root env fan-out, so it died
+        # in pydantic before reading the database, matched none of these patterns,
+        # and fell through to reporting "ready" whatever the truth was.
+        local rows held
+        case "$(turso_state)" in
+            local_only)
+                rows=$(turso_row_count "$(turso_db_path)") || rows=""
+                if [ "$rows" = "0" ]; then
+                    warn "Turso Cloud sync" "local database is empty and unsynced"
+                    note "Both InvestPal processes refuse to start until this is settled."
+                    note "Nothing on this machine to lose, so the cloud copy wins."
+                    ask_yn "Download the cloud database now?" "y" && \
+                        turso_make turso_first_pull
+                else
+                    case "$rows" in
+                        "") held="" ;;
+                        1)  held=" (1 row)" ;;
+                        *)  held=" ($rows rows)" ;;
+                    esac
+                    warn "Turso Cloud sync" "local database not yet pushed$held"
+                    note "Both InvestPal processes refuse to start until this is settled."
+                    if ask_yn "Does the cloud database already hold your data?" "n"; then
+                        note "Keeping this file would collide with it, so it is moved aside."
+                        turso_make turso_first_pull FORCE=1
+                    else
+                        turso_make turso_first_push
+                    fi
+                fi
                 ;;
-            *fresh*)
+            fresh)
                 warn "Turso Cloud sync" "no local database yet"
-                ask_yn "Run 'make turso_first_pull' now?" "y" && \
-                    make -C "$REPO_DIR" --no-print-directory turso_first_pull
+                ask_yn "Download the cloud database now?" "y" && \
+                    turso_make turso_first_pull
                 ;;
-            *broken*)
-                bad "Turso Cloud sync" "inconsistent local state"
-                note "Move the investpal.db-* sidecars aside, then run 'make turso_first_pull'."
-                note "See InvestPal/docs/turso_sync.md."
+            broken)
+                warn "Turso Cloud sync" "sync metadata with no database file"
+                note "The leftover sidecars are moved aside, not deleted."
+                ask_yn "Rebuild from the cloud database now?" "y" && \
+                    turso_make turso_first_pull
                 ;;
-            *)
+            synced)
                 ok "Turso Cloud sync" "ready"
                 ;;
         esac

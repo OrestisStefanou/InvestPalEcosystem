@@ -280,15 +280,45 @@ if [ -z "$TURSO_SYNC_URL" ]; then
     TURSO_SYNC_URL=$(env_get "$REPO_DIR/InvestPal/.env" TURSO_SYNC_URL)
 fi
 if [ -n "$TURSO_SYNC_URL" ]; then
-    state=$(make -C "$REPO_DIR/InvestPal" --no-print-directory turso_status 2>&1) || true
-    case "$state" in
-        *local_only*) fails "Turso Cloud sync" "local database never pushed"
-                      fix "make turso_first_push — InvestPal will not start until then" ;;
-        *fresh*)      fails "Turso Cloud sync" "no local database"
-                      fix "make turso_first_pull" ;;
-        *broken*)     fails "Turso Cloud sync" "inconsistent local state"
-                      fix "see InvestPal/docs/turso_sync.md" ;;
-        *)            pass "Turso Cloud sync" "synced" ;;
+    # State comes from the files (lib.sh turso_state), exactly as InvestPal's
+    # db_state() decides it, rather than from grepping `turso_status` output for
+    # state names it never prints. That grep matched nothing and fell through to
+    # the default branch, so a database that was stopping both services dead was
+    # reported as "synced".
+    db="$(turso_db_path)"
+    case "$(turso_state)" in
+        synced)
+            pass "Turso Cloud sync" "synced"
+            ;;
+        local_only)
+            # Whether the file holds anything decides which command is right, and
+            # naming only one of them is what sent an empty database down the
+            # first_push path with no way back but deleting it by hand.
+            rows=$(turso_row_count "$db") || rows=""
+            case "$rows" in
+                "") held="" ;;
+                1)  held=" (1 row)" ;;
+                *)  held=" ($rows rows)" ;;
+            esac
+            if [ "$rows" = "0" ]; then
+                fails "Turso Cloud sync" "local database never pushed, and it is empty"
+                fix "make turso_first_pull — take the cloud copy (the empty file is moved aside)"
+                fix "make turso_first_push — or seed the cloud from this machine instead"
+            else
+                fails "Turso Cloud sync" "local database never pushed$held"
+                fix "make turso_first_push — seed the cloud from this machine"
+                fix "make turso_first_pull FORCE=1 — or discard it for the cloud copy"
+            fi
+            fix "InvestPal will not start until one of those has run"
+            ;;
+        broken)
+            fails "Turso Cloud sync" "sync metadata with no database file"
+            fix "make turso_first_pull — it moves the leftover sidecars aside itself"
+            ;;
+        fresh)
+            fails "Turso Cloud sync" "no local database"
+            fix "make turso_first_pull"
+            ;;
     esac
 else
     info "Turso Cloud sync" "not configured (local file only)"
