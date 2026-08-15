@@ -28,6 +28,10 @@ check_repo "InvestPal"
 echo ""
 echo "Starting services..."
 
+# Set by any optional service that fails to come up, so the closing summary can
+# say "some services" instead of claiming everything started.
+OPTIONAL_FAILED=false
+
 # ── 1. MarketDataMcpServer (required by InvestPal) ───────────────────────────
 # With the root config present PORT comes from the fan-out. Without it, fall
 # back to reading the service's own .env, as this script always did — noting
@@ -37,16 +41,21 @@ if ! root_config_present; then
     MARKET_DATA_PORT="${MARKET_DATA_PORT:-8082}"
 fi
 collect_env market-data-mcp
-start_service "market-data-mcp" "$REPO_DIR/MarketDataMcpServer" "make run_mcp_server" "${ENV_PAIRS[@]}"
-wait_for_port "MarketDataMcpServer" "$MARKET_DATA_PORT"
+start_service "market-data-mcp" "$MARKET_DATA_PORT" "$REPO_DIR/MarketDataMcpServer" "make run_mcp_server" "${ENV_PAIRS[@]}"
+wait_for_service "MarketDataMcpServer" "market-data-mcp" "$MARKET_DATA_PORT"
 
 # ── 2. AlpacaMcpServer ───────────────────────────────────────────────────────
+# Optional, like Coinbase below: without credentials the server exits on startup,
+# and the persona is written to work without broker tools. Gated all the same, so
+# a missing key is reported here instead of showing up as a dead MCP server.
 collect_env alpaca-mcp
-start_service "alpaca-mcp" "$REPO_DIR/AlpacaMcpServer" "uv run python main.py" "${ENV_PAIRS[@]}"
+start_service "alpaca-mcp" "$ALPACA_MCP_PORT" "$REPO_DIR/AlpacaMcpServer" "uv run python main.py" "${ENV_PAIRS[@]}"
+wait_for_service "AlpacaMcpServer" "alpaca-mcp" "$ALPACA_MCP_PORT" 30 optional || OPTIONAL_FAILED=true
 
 # ── 3. CoinbaseMcpServer ─────────────────────────────────────────────────────
 collect_env coinbase-mcp
-start_service "coinbase-mcp" "$REPO_DIR/CoinbaseMcpServer" "uv run main.py" "${ENV_PAIRS[@]}"
+start_service "coinbase-mcp" "$COINBASE_MCP_PORT" "$REPO_DIR/CoinbaseMcpServer" "uv run main.py" "${ENV_PAIRS[@]}"
+wait_for_service "CoinbaseMcpServer" "coinbase-mcp" "$COINBASE_MCP_PORT" 30 optional || OPTIONAL_FAILED=true
 
 # ── 4. InteractiveBrokersMcpServer (optional) ────────────────────────────────
 # Skipped entirely when the repo is not cloned, so a machine without it still
@@ -72,9 +81,11 @@ if [ -d "$IB_DIR" ]; then
         echo -e "  ${YELLOW}Skipping IB Client Portal Gateway:${NC} java is not on PATH."
         echo "    The gateway needs a Java 1.8+ runtime. The IB tools stay unusable until it runs."
     else
-        start_service "ib-gateway" "$IB_DIR/ib_clientportal" "bin/run.sh root/conf.yaml"
-        if wait_for_port "IB Client Portal Gateway" "$IB_GATEWAY_PORT" 30 optional; then
+        start_service "ib-gateway" "$IB_GATEWAY_PORT" "$IB_DIR/ib_clientportal" "bin/run.sh root/conf.yaml"
+        if wait_for_service "IB Client Portal Gateway" "ib-gateway" "$IB_GATEWAY_PORT" 30 optional; then
             IB_GATEWAY_UP=true
+        else
+            OPTIONAL_FAILED=true
         fi
     fi
 
@@ -95,29 +106,38 @@ if [ -d "$IB_DIR" ]; then
     fi
 
     collect_env interactive-brokers-mcp
-    start_service "interactive-brokers-mcp" "$IB_DIR" "uv run python main.py" "${ENV_PAIRS[@]}"
+    start_service "interactive-brokers-mcp" "$IB_MCP_PORT" "$IB_DIR" "uv run python main.py" "${ENV_PAIRS[@]}"
+    wait_for_service "InteractiveBrokersMcpServer" "interactive-brokers-mcp" "$IB_MCP_PORT" 30 optional \
+        || OPTIONAL_FAILED=true
 fi
 
 # ── 5. InvestPal REST API ────────────────────────────────────────────────────
 collect_env investpal-api
-start_service "investpal-api" "$REPO_DIR/InvestPal" "uv run fastapi run main.py" "${ENV_PAIRS[@]}"
+start_service "investpal-api" "$INVESTPAL_API_PORT" "$REPO_DIR/InvestPal" "uv run fastapi run main.py" "${ENV_PAIRS[@]}"
+# Gated like the MCP app: both open the same turso file at startup, so both fail
+# the same way when the database is missing or not initialised for sync.
+wait_for_service "InvestPal REST API" "investpal-api" "$INVESTPAL_API_PORT" 60
 
 # ── 6. InvestPal MCP App ─────────────────────────────────────────────────────
-# Gated, unlike the others: Claude Code connects to this server at launch, so
-# returning before it is listening is what produces the "MCP server unreachable"
-# note in the cockpit's SessionStart hook.
+# The one service whose failure is felt immediately: Claude Code connects to it
+# at launch, so returning before it is listening is what produces the "MCP server
+# unreachable" note in the cockpit's SessionStart hook.
 if ! root_config_present; then
     INVESTPAL_MCP_PORT=$(grep '^MCP_APP_SERVER_PORT=' "$REPO_DIR/InvestPal/.env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')
     INVESTPAL_MCP_PORT="${INVESTPAL_MCP_PORT:-9000}"
 fi
 collect_env investpal-mcp
-start_service "investpal-mcp" "$REPO_DIR/InvestPal" "uv run python3 -m apps.mcp_api.app" "${ENV_PAIRS[@]}"
+start_service "investpal-mcp" "$INVESTPAL_MCP_PORT" "$REPO_DIR/InvestPal" "uv run python3 -m apps.mcp_api.app" "${ENV_PAIRS[@]}"
 # Longer timeout than the default: on a cold start this initialises the turso
 # schema, and with TURSO_SYNC_URL set it also negotiates with Turso Cloud.
-wait_for_port "InvestPal MCP App" "$INVESTPAL_MCP_PORT" 60
+wait_for_service "InvestPal MCP App" "investpal-mcp" "$INVESTPAL_MCP_PORT" 60
 
 echo ""
-echo -e "${GREEN}All services started.${NC}"
+if [ "$OPTIONAL_FAILED" = true ]; then
+    echo -e "${YELLOW}Started, with optional services missing (see above).${NC}"
+else
+    echo -e "${GREEN}All services started.${NC}"
+fi
 echo ""
 service_table
 echo ""
