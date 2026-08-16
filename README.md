@@ -1,4 +1,19 @@
-# InvestPalEcosystem
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.png">
+    <img src="assets/logo-light.png" alt="InvestPal" width="420">
+  </picture>
+</p>
+
+<p align="center">
+  <a href="docs/architecture.md">Architecture</a> &nbsp;·&nbsp;
+  <a href="docs/skills.md">Skills</a> &nbsp;·&nbsp;
+  <a href="#setup">Setup</a> &nbsp;·&nbsp;
+  <a href="#ways-to-use-investpal">Ways to use it</a> &nbsp;·&nbsp;
+  <a href="https://orestisstefanou.github.io/investpal/">Website</a>
+</p>
+
+---
 
 InvestPal is an AI-powered investment advisor. You can ask it about stocks, ETFs, and crypto, get personalized advice, set reminders, and — optionally — connect your brokerage accounts to view your portfolio or place trades. It works as a pure conversational tool without any brokerage credentials.
 
@@ -12,7 +27,8 @@ This is the entry-point repository for the InvestPal app. The app is composed of
 | Coinbase MCP Server | [OrestisStefanou/CoinbaseMcpServer](https://github.com/OrestisStefanou/CoinbaseMcpServer) | 9090 |
 | Interactive Brokers MCP Server | [OrestisStefanou/InteractiveBrokersMcpServer](https://github.com/OrestisStefanou/InteractiveBrokersMcpServer) | 9092 |
 
-UI clients are separate; see [Ways to Use InvestPal](#ways-to-use-investpal).
+UI clients are separate; see [Ways to Use InvestPal](#ways-to-use-investpal). For how the pieces
+fit together, see [Architecture](docs/architecture.md).
 
 ---
 
@@ -21,6 +37,7 @@ UI clients are separate; see [Ways to Use InvestPal](#ways-to-use-investpal).
 | Capability | Details |
 |---|---|
 | AI Investment Advisor | Powered by OpenAI, Google Gemini, or Anthropic Claude |
+| [Skills](docs/skills.md) | Fifteen written analytical procedures, drawn from Graham and Dodd and Howard Marks, that the advisor follows instead of reasoning ad hoc |
 | Real-time Market Data | Stocks, ETFs, crypto prices, economic indicators, commodities, market news |
 | Personalized Advice | Adapts to your risk tolerance, investment horizon, and goals |
 | Cross-session Memory | Recalls notes from previous conversations, searchable by meaning — embeddings are computed locally, so note text never leaves the machine |
