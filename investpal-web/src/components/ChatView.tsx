@@ -86,8 +86,11 @@ export default function ChatView(props: Props) {
               <MessageBubble
                 key={`${m.role}-${i}-${m.created_at ?? ''}`}
                 message={m}
-                reveal={i === messages.length - 1 ? chat.revealing : null}
-                onRevealed={() => chat.setRevealing(null)}
+                isNew={
+                  chat.repliesReceived > 0 &&
+                  i === messages.length - 1 &&
+                  m.role === 'agent'
+                }
               />
             ))}
 
