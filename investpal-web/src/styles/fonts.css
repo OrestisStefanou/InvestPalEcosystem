@@ -1,0 +1,33 @@
+/* Self-hosted Inter and Newsreader, latin subset, variable.
+ *
+ * The public site links these from Google Fonts. This app does not, on purpose:
+ * InvestPal is a local-first tool that people run offline, and a remote font
+ * link would be the only network call the page makes. Both families are OFL
+ * licensed, so shipping the woff2 here is fine.
+ *
+ * One file per family, not one per weight. Google returns byte-identical woff2
+ * for wght 400, 500 and 600 because both families are variable, so three
+ * copies of Inter would have been three copies of the same 48KB. The ranges
+ * below are the ones actually requested from the API; note that .btn uses
+ * font-weight 550, which only resolves because this is a variable face and
+ * base.css sets font-synthesis-weight: none.
+ */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/inter-var.woff2') format('woff2');
+}
+
+/* Newsreader carries an optical-size axis (opsz 6..72). No font-variation-settings
+   here: browsers apply opsz automatically from the rendered font-size, which is
+   the whole point of the axis, and pinning it would flatten display type. */
+@font-face {
+  font-family: 'Newsreader';
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url('/fonts/newsreader-var.woff2') format('woff2');
+}
