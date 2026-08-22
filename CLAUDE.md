@@ -38,8 +38,8 @@ Do not copy that prompt into this repo. The InvestPal MCP server is its single s
 | --- | --- |
 | `investpal` | Profile notes, conversation memory (incl. semantic search), reminders, workflows, skills, math helpers |
 | `market-data` | Stocks, ETFs, crypto, economics, commodities, news |
-| `alpaca` | Stock/ETF portfolio and orders (needs `ALPACA_API_KEY` / `ALPACA_API_SECRET` env vars) |
-| `coinbase` | Crypto portfolio and orders (needs `COINBASE_API_KEY` / `COINBASE_API_SECRET` env vars) |
+| `alpaca` | Stock/ETF portfolio and orders (the server needs `ALPACA_API_KEY` / `ALPACA_API_SECRET` in `.env.secrets`; without them it advertises no tools) |
+| `coinbase` | Crypto portfolio and orders (as above, with `COINBASE_API_KEY` / `COINBASE_API_SECRET`) |
 | `interactive-brokers` | IB accounts, positions, balances, quotes, trades and orders (no API keys; needs the IB Client Portal Gateway running and logged in) |
 
 ## Scheduled workflows
@@ -77,9 +77,9 @@ git repos. Never modify them from here.
 ## Infrastructure
 
 Started and stopped manually by the user: `make start` (backend) / `make stop`. Launch Claude
-Code only after the backend is up, so the MCP servers are reachable — and via `make claude`,
-which sources the config first so `.mcp.json` can resolve the brokerage credentials. First run
-on a machine is `make setup`, which does everything end to end. `make status` shows what is up;
+Code only after the backend is up, so the MCP servers are reachable. `make claude` loads `.env`
+and fails fast if setup has not been run, but bare `claude` works too: no credential needs to
+exist in this process. First run on a machine is `make setup`, which does everything end to end. `make status` shows what is up;
 `make doctor` diagnoses anything that looks wrong and is the right first suggestion when the
 client reports a problem.
 
@@ -92,7 +92,9 @@ All of it lives in two gitignored files at the root of this repo, and `scripts/l
 - **`.env.secrets`** — API keys and tokens. **You are denied read access to this file** by
   `permissions.deny` in `.claude/settings.json`. Do not try to read it, and do not route around
   the rule with a different tool. When a credential is missing, say which key is absent and ask
-  the client to add it or to relaunch with `make claude` — never go looking for the value.
+  the client to add it and restart the affected service; never go looking for the value. A broker
+  whose tools are absent from your tool list is the symptom of a credential that was not set when
+  its server started.
 
 Never edit a `.env` inside a service repo: they are superseded, and a stale key in one is a
 hard startup failure under pydantic's `extra="forbid"`. `make doctor` reports any that survive.

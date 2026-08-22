@@ -10,19 +10,11 @@
     },
     "alpaca": {
       "type": "http",
-      "url": "http://127.0.0.1:9091/mcp",
-      "headers": {
-        "X-Alpaca-Api-Key": "${ALPACA_API_KEY:-}",
-        "X-Alpaca-Api-Secret": "${ALPACA_API_SECRET:-}"
-      }
+      "url": "http://127.0.0.1:9091/mcp"
     },
     "coinbase": {
       "type": "http",
-      "url": "http://127.0.0.1:9090/mcp",
-      "headers": {
-        "X-Coinbase-Api-Key": "${COINBASE_API_KEY:-}",
-        "X-Coinbase-Api-Secret": "${COINBASE_API_SECRET:-}"
-      }
+      "url": "http://127.0.0.1:9090/mcp"
     },
     "interactive-brokers": {
       "type": "http",

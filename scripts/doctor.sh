@@ -385,17 +385,20 @@ else
     fix "restore the permissions.deny block in .claude/settings.json"
 fi
 
-# The cockpit reads brokerage keys from the shell, not from the file, because
-# .mcp.json interpolates them into request headers.
-for pair in "ALPACA_API_KEY:Alpaca" "COINBASE_API_KEY:Coinbase"; do
-    var="${pair%%:*}"; label="${pair#*:}"
-    in_file=$(env_get "$SECRETS_FILE" "$var")
-    if [ -n "$in_file" ]; then
-        if [ -n "${!var}" ]; then
-            pass "$label credentials" "set and exported"
-        else
-            warns "$label credentials" "in .env.secrets but not in this shell"
-            fix "launch Claude Code with 'make claude' so .mcp.json can read them"
+# Brokerage keys are read by the broker servers from their own process
+# environment, which start.sh supplies. Nothing needs them in this shell, so the
+# only question is whether the file has them.
+for pair in "ALPACA_API_KEY:Alpaca:alpaca-mcp" "COINBASE_API_KEY:Coinbase:coinbase-mcp"; do
+    IFS=: read -r var label service <<<"$pair"
+    if [ -n "$(env_get "$SECRETS_FILE" "$var")" ]; then
+        pass "$label credentials" "configured"
+        # The failure mode that replaced a missing header: a server that started
+        # without credentials comes up healthy and simply registers no tools, so
+        # the port check above cannot see it. The server says so on startup.
+        if [ -f "$LOG_DIR/$service.log" ] \
+           && tail -50 "$LOG_DIR/$service.log" | grep -q "registering no tools"; then
+            warns "$label tools" "server started without credentials"
+            fix "make stop && make start, then check logs/$service.log"
         fi
     else
         info "$label credentials" "not configured"
