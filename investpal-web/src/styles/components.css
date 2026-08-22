@@ -65,6 +65,17 @@
 .icon-btn:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 6%, transparent); }
 .icon-btn svg { width: 18px; height: 18px; }
 
+/* The nav is the widest fixed thing in the app: mark, wordmark, three tabs and
+   the toggle come to about 500px of content that cannot shrink. Below this the
+   wordmark goes (the owl still identifies the app) and the tabs tighten. */
+@media (max-width: 600px) {
+  .nav { gap: .5rem; padding-inline: .75rem; }
+  .brand-word { display: none; }
+  .tab { padding: .5rem .5rem; font-size: .9rem; }
+  .tab::after { left: .5rem; right: .5rem; }
+  .tabs { gap: 0; }
+}
+
 .icon-sun { display: none; }
 :root[data-theme="dark"] .icon-sun { display: block; }
 :root[data-theme="dark"] .icon-moon { display: none; }
@@ -107,7 +118,6 @@
 /* ── Chat ─────────────────────────────────────────────────────────────────── */
 
 .chat { display: grid; grid-template-columns: 17rem 1fr; height: 100%; min-height: 0; }
-@media (max-width: 860px) { .chat { grid-template-columns: 1fr; } .sessions { display: none; } }
 
 .sessions {
   display: flex; flex-direction: column; min-height: 0;
@@ -136,6 +146,16 @@
 }
 .session-when { font-family: var(--font-mono); font-size: .7rem; color: var(--fg-soft); }
 
+/* Below this width the session list is dropped and the conversation takes the
+   whole pane. This block has to come after .sessions, not before it: both
+   selectors have the same specificity, so whichever is declared last wins.
+   With it above, `display: flex` always beat `display: none` and the sidebar
+   never hid at all. */
+@media (max-width: 860px) {
+  .chat { grid-template-columns: 1fr; }
+  .sessions { display: none; }
+}
+
 .conversation { display: grid; grid-template-rows: 1fr auto; min-height: 0; }
 
 .transcript {
@@ -143,13 +163,33 @@
   padding: clamp(1.25rem, 3vw, 2.25rem) clamp(1rem, 4vw, 2.5rem);
 }
 .transcript-inner { max-width: 52rem; margin-inline: auto; display: grid; gap: 1.6rem; }
+/* Grid and flex items default to min-width: auto, so they refuse to shrink
+   below their content. Without this a wide Markdown table pushes the whole
+   page sideways instead of scrolling inside its own wrapper. The site's CSS
+   carries the same guard on every grid it builds. */
+.transcript-inner > * { min-width: 0; }
 
-.msg { display: grid; gap: .45rem; }
+.msg { display: grid; gap: .45rem; min-width: 0; }
+.msg > * { min-width: 0; }
 .msg-who {
   font-family: var(--font-mono); font-size: .68rem;
   letter-spacing: .1em; text-transform: uppercase; color: var(--fg-soft);
 }
-.msg-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Only what the user typed keeps pre-wrap. Agent replies are Markdown, where
+   the renderer owns the block structure and pre-wrap would double every gap. */
+.msg-body { overflow-wrap: break-word; }
+.msg-body--plain { white-space: pre-wrap; }
+
+/* A reply that has just landed fades in, rather than a wall of text appearing
+   between one frame and the next. This replaced a character-by-character
+   typewriter, which cannot survive Markdown: slicing mid-token renders `**bol`
+   as literal asterisks and a half-written table as garbage. */
+.msg--new { animation: msgIn .45s var(--ease) both; }
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .msg--new { animation: none; } }
 
 .msg--user .msg-body {
   background: var(--bg-soft);
@@ -215,6 +255,13 @@
 }
 .composer textarea:focus { border-color: var(--fg-soft); }
 .composer textarea::placeholder { color: var(--fg-soft); }
+
+/* At narrow widths the placeholder wraps to two lines in a one-row textarea and
+   gets clipped through the middle of the glyphs. Give it room rather than
+   truncating, since the field grows with real input anyway. */
+@media (max-width: 600px) {
+  .composer textarea { min-height: 4.1rem; }
+}
 
 .composer-hint {
   display: flex; flex-wrap: wrap; gap: .35rem 1rem;
@@ -364,3 +411,122 @@
 
 .banner-detail { margin-top: .4rem; font-size: .875rem; color: var(--fg-soft); }
 .banner strong { font-weight: 600; }
+
+/* ── Markdown ─────────────────────────────────────────────────────────────── */
+/* The agent replies in Markdown. Styling follows the site: Newsreader for
+   headings at weight 400, gold used structurally and never as body text,
+   hairline borders, --bg-sunk for code. Spacing is tight relative to the site's
+   because this sits inside a conversation, not a page. */
+
+.md { min-width: 0; }
+.md > *:first-child { margin-top: 0; }
+.md > *:last-child { margin-bottom: 0; }
+
+.md p { margin: .7rem 0; }
+
+.md h1, .md h2, .md h3, .md h4 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -.015em;
+  line-height: 1.2;
+  margin: 1.5rem 0 .6rem;
+  text-wrap: balance;
+}
+.md h1 { font-size: 1.6rem; }
+.md h2 { font-size: 1.4rem; }
+.md h3 { font-size: 1.18rem; }
+.md h4 { font-size: 1.05rem; font-family: var(--font-sans); font-weight: 600; }
+
+/* The site marks a section heading with a short gold rule. Same idea here, at
+   the scale of a chat message. */
+.md h2 {
+  padding-bottom: .45rem;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.md h2::after {
+  content: ""; position: absolute; left: 0; bottom: -1px;
+  width: 40px; height: 2px; border-radius: 2px; background: var(--accent);
+}
+
+.md strong { font-weight: 600; color: var(--fg); }
+.md em { font-style: italic; }
+.md del { opacity: .6; }
+
+.md ul, .md ol { margin: .7rem 0; padding-left: 1.35rem; }
+.md ul { list-style: disc; }
+.md ol { list-style: decimal; }
+.md li { margin: .3rem 0; }
+.md li::marker { color: var(--accent); }
+.md ol li::marker { color: var(--fg-soft); font-variant-numeric: tabular-nums; }
+.md li > ul, .md li > ol { margin: .3rem 0; }
+
+/* A rule between sections, not a heavy divider. */
+.md hr {
+  border: 0; height: 1px; background: var(--border);
+  margin: 1.4rem 0;
+}
+/* The agent tends to emit `---` immediately before a `##`, and the heading
+   already carries its own rule. Two hairlines a few pixels apart read as a
+   mistake, so the redundant one goes. Worst case on a browser without :has()
+   is one extra rule, which is cosmetic. */
+.md hr:has(+ :is(h1, h2, h3, h4)) { display: none; }
+
+.md blockquote {
+  margin: .9rem 0;
+  padding: .1rem 0 .1rem 1rem;
+  border-left: 3px solid var(--accent);
+  color: var(--fg-soft);
+}
+
+.md code {
+  font-family: var(--font-mono);
+  font-size: .875em;
+  background: var(--bg-sunk);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: .1em .38em;
+}
+.md pre {
+  margin: .9rem 0;
+  padding: .85rem 1rem;
+  background: var(--code-bg);
+  border: 1px solid color-mix(in srgb, var(--code-fg) 12%, transparent);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+}
+.md pre code {
+  background: none; border: 0; padding: 0;
+  color: var(--code-fg);
+  font-size: .84rem; line-height: 1.7;
+}
+
+/* Wide tables scroll inside their own container. The transcript must never
+   scroll sideways. */
+.md-table-wrap {
+  margin: 1rem 0;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.md table { border-collapse: collapse; width: 100%; min-width: 28rem; font-size: .92rem; }
+.md thead th {
+  text-align: left;
+  font-size: .72rem; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--fg-soft);
+  background: var(--bg-soft);
+  padding: .6rem .8rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.md tbody td {
+  padding: .6rem .8rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.md tbody tr:last-child td { border-bottom: 0; }
+.md tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--fg) 2.5%, transparent); }
+
+.md a { overflow-wrap: anywhere; }   /* a bare URL has no spaces to break at */
+.md img { border-radius: var(--radius-sm); margin: .8rem 0; }

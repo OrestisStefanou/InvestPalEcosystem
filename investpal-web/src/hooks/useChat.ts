@@ -16,8 +16,12 @@ interface Args {
 export function useChat({ sessionId, onMessages }: Args) {
   const [pending, setPending] = useState(false)
   const [startedAt, setStartedAt] = useState<number | null>(null)
-  /** Set when a reply has just arrived, so the view can reveal it gradually. */
-  const [revealing, setRevealing] = useState<string | null>(null)
+  /**
+   * How many replies have landed in this session's lifetime. The view uses it
+   * to fade in a reply that just arrived, while leaving a transcript loaded
+   * from history to render without animation.
+   */
+  const [repliesReceived, setRepliesReceived] = useState(0)
   const [error, setError] = useState<ApiError | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -56,7 +60,7 @@ export function useChat({ sessionId, onMessages }: Args) {
       try {
         const { response } = await sendMessage(sessionId, body, ac.signal)
         onMessages((prev) => [...prev, { role: 'agent', content: response, created_at: null }])
-        setRevealing(response)
+        setRepliesReceived((n) => n + 1)
       } catch (err) {
         if (err instanceof ApiError) {
           if (err.kind === 'aborted') return
@@ -76,5 +80,5 @@ export function useChat({ sessionId, onMessages }: Args) {
     [sessionId, pending, onMessages],
   )
 
-  return { send, cancel, pending, startedAt, error, setError, revealing, setRevealing }
+  return { send, cancel, pending, startedAt, error, setError, repliesReceived }
 }
