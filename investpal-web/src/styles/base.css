@@ -1,0 +1,86 @@
+/* Reset and primitives, carried over from the site's investpal.css so the app
+   reads as the same product rather than a lookalike. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  /* No faux bold. The variable faces cover 400-600, so a synthesised weight
+     would only ever be a worse version of a real one. */
+  font-synthesis-weight: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden; /* the app owns its own scroll regions */
+}
+
+#root { height: 100%; }
+
+h1, h2, h3, h4 { margin: 0; font-weight: 400; }
+p, ul, ol, dl, figure, table { margin: 0; }
+ul, ol { padding: 0; list-style: none; }
+img, svg { display: block; max-width: 100%; }
+button { font: inherit; color: inherit; }
+
+/* Display type is Newsreader at 400 with negative tracking. The site never
+   bolds a heading, and neither does this. */
+.h1, .h2, .h3 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -.015em;
+  text-wrap: balance;
+}
+.h2 { font-size: clamp(1.5rem, 2.4vw, 1.95rem); line-height: 1.14; }
+.h3 { font-size: 1.2rem; line-height: 1.25; }
+
+/* Uppercase micro-label. The one place small caps and letter-spacing belong. */
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+
+a {
+  color: var(--accent-text);
+  text-decoration-color: color-mix(in srgb, var(--accent-text) 35%, transparent);
+  text-underline-offset: .18em;
+}
+a:hover { text-decoration-color: currentColor; }
+
+code, .mono { font-family: var(--font-mono); }
+
+:where(a, button, summary, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+::selection { background: var(--accent-soft); color: var(--fg); }
+
+.vh {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* Scrollbars, so the dark theme does not get a light gutter. */
+* { scrollbar-color: var(--border-strong) transparent; scrollbar-width: thin; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    transition-duration: .001ms !important;
+  }
+}

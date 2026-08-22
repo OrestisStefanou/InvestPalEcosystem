@@ -59,7 +59,7 @@ Once the backend services are running you can interact with InvestPal through se
 |---|---|---|
 | **Claude Code Cockpit** | Turn Claude Code into the advisor itself; auto-loads the persona and runs your due scheduled workflows | [docs/claude-code-cockpit.md](docs/claude-code-cockpit.md) |
 | **Claude Desktop** | Add InvestPal as MCP tools inside Claude Desktop | [docs/claude-desktop.md](docs/claude-desktop.md) |
-| **Streamlit Dev UI** | Simple browser-based chat UI, great for local testing | [docs/dev-ui.md](docs/dev-ui.md) |
+| **Web UI** | Local browser app: chat with history, scheduled workflows, reminders | [docs/web-ui.md](docs/web-ui.md) |
 | **Custom UI** | Build your own client using the InvestPal REST API | [docs/custom-ui.md](docs/custom-ui.md) |
 
 ---
@@ -72,6 +72,7 @@ Once the backend services are running you can interact with InvestPal through se
 - **Go** 1.25+
 - **[uv](https://docs.astral.sh/uv/)** — supplies the Python 3.13 runtimes for the four Python services
 - **Java** 1.8+ — only for the Interactive Brokers gateway; skip it if you are not using IB
+- **Node** 20+ — only for the local web UI (`make ui`); skip it if you use the cockpit
 
 ---
 
@@ -140,7 +141,7 @@ the two example files document the rest inline.
 
 ### Backend agent (optional)
 
-InvestPal ships its own LLM agent, used by the `/chat` REST endpoint, the Streamlit dev
+InvestPal ships its own LLM agent, used by the `/chat` REST endpoint, the local web
 UI, and workflows the backend executes itself. That agent needs a provider API key. The
 Claude Code cockpit does not use any of it and needs no key.
 

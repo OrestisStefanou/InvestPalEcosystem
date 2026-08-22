@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" role="img" aria-label="InvestPal">
+  <title>InvestPal</title>
+  <circle cx="120" cy="120" r="120" fill="#1a3a5c"/>
+  <path d="M78 34 L100 80 L62 74 Z" fill="#e8eef5"/>
+  <path d="M162 34 L140 80 L178 74 Z" fill="#e8eef5"/>
+  <ellipse cx="120" cy="132" rx="68" ry="72" fill="#e8eef5"/>
+  <path d="M58 114 C56 140 62 166 70 178 C79 167 82 140 78 116 Z" fill="#c3cfdd"/>
+  <path d="M182 114 C184 140 178 166 170 178 C161 167 158 140 162 116 Z" fill="#c3cfdd"/>
+  <ellipse cx="120" cy="155" rx="44" ry="46" fill="#f5f7fa"/>
+  <circle cx="94" cy="112" r="22" fill="#ffffff"/>
+  <circle cx="146" cy="112" r="22" fill="#ffffff"/>
+  <circle cx="94" cy="113" r="9.5" fill="#1a3a5c"/>
+  <circle cx="146" cy="113" r="9.5" fill="#1a3a5c"/>
+  <circle cx="90.5" cy="109.5" r="3.2" fill="#ffffff"/>
+  <circle cx="142.5" cy="109.5" r="3.2" fill="#ffffff"/>
+  <path d="M110 136 L130 136 L120 154 Z" fill="#c9932c"/>
+  <path d="M100 172 L120 162 L140 172" fill="none" stroke="#c9932c" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M105 184 L120 175 L135 184" fill="none" stroke="#c9932c" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M110 196 L120 188 L130 196" fill="none" stroke="#c9932c" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

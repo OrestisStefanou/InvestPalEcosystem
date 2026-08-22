@@ -1,0 +1,130 @@
+/* InvestPal design tokens.
+ *
+ * Lifted verbatim from the public site, OrestisStefanou.github.io
+ * assets/css/investpal.css, so the app and the site cannot drift apart. If you
+ * change a colour, change it there first and re-copy this block.
+ *
+ * Dark mode is dual-gated on purpose: the media query follows the system, and
+ * the [data-theme] attribute lets the toggle override it in both directions.
+ * The theme choice is stored under localStorage key `ip-theme`, the same key
+ * the site uses, so a visitor who set a theme there arrives here with it.
+ *
+ * The gold (--accent) is structural only: rules, borders, icons, marks. It is
+ * never text. --accent-text is the AA-passing variant for links.
+ */
+
+:root {
+  color-scheme: light;
+
+  --bg: #ffffff;
+  --bg-soft: #f5f7fa;
+  --bg-sunk: #eaeff6;
+  --fg: #12233a;
+  --fg-soft: #5d6b7d;
+  --border: #dde4ec;
+  --border-strong: #c3cfdd;
+
+  --navy: #1a3a5c;
+  --navy-soft: #2c5478;
+
+  --accent: #c9932c;        /* rules, icons, active marks — never text */
+  --accent-text: #8a6416;   /* AA-passing gold for links */
+  --accent-soft: #fdf6e6;
+
+  --code-bg: #12233a;
+  --code-fg: #e8eef5;
+  --code-dim: #8fa3bb;
+
+  --nav-bg: rgba(255, 255, 255, .82);
+  --shadow: 0 1px 2px rgba(18, 35, 58, .04), 0 8px 24px -12px rgba(18, 35, 58, .12);
+
+  /* wordmark */
+  --logo-word: #12233a;
+  --logo-accent: #c9932c;
+  /* owl mark. Matches assets/logo-light.png in the InvestPalEcosystem repo,
+     which is the canonical lockup. The mark holds these colours in both
+     themes; only the gold follows --accent. */
+  --mark-bg: #f5f7fa;         /* disc */
+  --mark-disc-edge: #dde4ec;  /* disc ring */
+  --mark-body: #1a3a5c;       /* ears and body */
+  --mark-wing: #2c5478;       /* wing panels */
+  --mark-face: #e8eef5;       /* face and belly */
+  --mark-eye: #ffffff;
+  --mark-pupil: #1a3a5c;
+  --mark-accent: #c9932c;     /* beak and chevrons */
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --nav-h: 76px;
+  --max: 72rem;
+  --measure: 42rem;
+  --ease: cubic-bezier(.16, 1, .3, 1);
+
+  --font-serif: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg: #0e1a29;
+    --bg-soft: #14243a;
+    --bg-sunk: #0a1420;
+    --fg: #e8eef5;
+    --fg-soft: #97a6b8;
+    --border: #24374f;
+    --border-strong: #354c68;
+
+    --navy: #2c5478;
+    --navy-soft: #3d6b94;
+
+    --accent: #e0b055;
+    --accent-text: #eec97f;
+    --accent-soft: #2a2113;
+
+    --code-bg: #0a1420;
+    --code-fg: #e8eef5;
+    --code-dim: #7d92ad;
+
+    --nav-bg: rgba(14, 26, 41, .82);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px -12px rgba(0, 0, 0, .6);
+
+    --logo-word: #e8eef5;
+    --logo-accent: #e0b055;
+
+    --mark-accent: #e0b055;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0e1a29;
+  --bg-soft: #14243a;
+  --bg-sunk: #0a1420;
+  --fg: #e8eef5;
+  --fg-soft: #97a6b8;
+  --border: #24374f;
+  --border-strong: #354c68;
+
+  --navy: #2c5478;
+  --navy-soft: #3d6b94;
+
+  --accent: #e0b055;
+  --accent-text: #eec97f;
+  --accent-soft: #2a2113;
+
+  --code-bg: #0a1420;
+  --code-fg: #e8eef5;
+  --code-dim: #7d92ad;
+
+  --nav-bg: rgba(14, 26, 41, .82);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px -12px rgba(0, 0, 0, .6);
+
+  --logo-word: #e8eef5;
+  --logo-accent: #e0b055;
+
+  --mark-accent: #e0b055;
+}

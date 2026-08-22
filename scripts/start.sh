@@ -8,16 +8,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$LOG_DIR"
 load_env
 
-# Collect a service's fan-out pairs into an array. Written as a read loop rather
-# than mapfile so this keeps working on the bash 3.2 that ships with macOS.
-collect_env() {
-    ENV_PAIRS=()
-    local line
-    while IFS= read -r line; do
-        [ -n "$line" ] && ENV_PAIRS+=("$line")
-    done < <(service_env "$1")
-}
-
 # ── Check all repos exist ────────────────────────────────────────────────────
 echo "Checking repositories..."
 check_repo "MarketDataMcpServer"

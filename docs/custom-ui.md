@@ -103,4 +103,4 @@ The following existing clients in this repository show real-world usage patterns
 
 | Client | Location | Notes |
 |---|---|---|
-| Streamlit Dev UI | `InvestPal/dev-ui/app.py` | Simple Python client using `requests` |
+| Web UI | `investpal-web/src/api/` | Typed TypeScript client over `fetch`, covering all ten endpoints. See [web-ui.md](web-ui.md) |

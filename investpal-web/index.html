@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InvestPal</title>
+<!-- The navy-disc variant, matching the public site. It reads better than the
+     light lockup at 16-32px, where a near-white disc loses the owl. -->
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/favicon.png" sizes="32x32">
+
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1a29" media="(prefers-color-scheme: dark)">
+
+<!-- Blocking on purpose: it stamps data-theme before first paint, so a dark
+     theme does not flash white. Same localStorage key as the public site, so a
+     theme chosen there carries over. -->
+<script>
+(function(){var d=document.documentElement;d.className+=' js';
+try{var t=localStorage.getItem('ip-theme');
+if(t==='light'||t==='dark')d.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+</head>
+<body>
+
+<!-- The marks are inline symbols rather than image files so they recolour with
+     the theme through the --mark-* custom properties. Copied from the site's
+     _pages/investpal.html; keep them in sync with it. -->
+<svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+<symbol id="ip-owl" viewBox="0 0 240 240">
+    <circle cx="120" cy="120" r="119" fill="var(--mark-bg)" stroke="var(--mark-disc-edge)" stroke-width="2"/>
+  <path d="M78 34 L100 80 L62 74 Z" fill="var(--mark-body)"/>
+  <path d="M162 34 L140 80 L178 74 Z" fill="var(--mark-body)"/>
+  <ellipse cx="120" cy="132" rx="68" ry="72" fill="var(--mark-body)"/>
+  <path d="M58 114 C56 140 62 166 70 178 C79 167 82 140 78 116 Z" fill="var(--mark-wing)"/>
+  <path d="M182 114 C184 140 178 166 170 178 C161 167 158 140 162 116 Z" fill="var(--mark-wing)"/>
+  <ellipse cx="120" cy="155" rx="44" ry="46" fill="var(--mark-face)"/>
+  <circle cx="94" cy="112" r="22" fill="var(--mark-eye)"/>
+  <circle cx="146" cy="112" r="22" fill="var(--mark-eye)"/>
+  <circle cx="94" cy="113" r="9.5" fill="var(--mark-pupil)"/>
+  <circle cx="146" cy="113" r="9.5" fill="var(--mark-pupil)"/>
+  <circle cx="90.5" cy="109.5" r="3.2" fill="var(--mark-eye)"/>
+  <circle cx="142.5" cy="109.5" r="3.2" fill="var(--mark-eye)"/>
+  <path d="M110 136 L130 136 L120 154 Z" fill="var(--mark-accent)"/>
+  <path d="M100 172 L120 162 L140 172" fill="none" stroke="var(--mark-accent)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M105 184 L120 175 L135 184" fill="none" stroke="var(--mark-accent)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M110 196 L120 188 L130 196" fill="none" stroke="var(--mark-accent)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+<symbol id="ip-word" viewBox="255 80 222 52"><path d="M267.85 86.17V124.00H261.15V86.17ZM279.46 108.84V124.00H273.06V97.19H279.36V101.30Q282.15 96.65 287.59 96.65Q291.80 96.65 294.48 99.37Q297.16 102.09 297.16 107.24V124.00H290.74V108.26Q290.74 105.31 289.31 103.79Q287.89 102.27 285.33 102.27Q282.81 102.27 281.14 103.84Q279.46 105.41 279.46 108.84ZM309.76 124.00 299.68 97.19H306.46L311.36 111.15Q311.89 112.75 312.39 114.34Q312.88 115.93 313.37 117.50Q313.85 115.93 314.33 114.34Q314.81 112.75 315.32 111.15L320.15 97.19H326.85L316.77 124.00ZM341.20 124.61Q337.19 124.61 334.24 122.81Q331.30 121.00 329.71 117.84Q328.12 114.68 328.12 110.62Q328.12 106.53 329.76 103.37Q331.40 100.21 334.29 98.39Q337.19 96.58 340.95 96.58Q344.81 96.58 347.70 98.36Q350.60 100.13 352.20 103.27Q353.79 106.40 353.79 110.52V112.27H334.40Q334.52 115.54 336.33 117.55Q338.13 119.56 341.35 119.56Q343.77 119.56 345.34 118.50Q346.91 117.45 347.47 115.72H353.46Q352.96 118.34 351.24 120.34Q349.53 122.35 346.94 123.48Q344.35 124.61 341.20 124.61ZM334.45 107.85H347.65Q347.35 104.98 345.58 103.32Q343.82 101.66 341.05 101.66Q338.26 101.66 336.52 103.32Q334.78 104.98 334.45 107.85ZM367.87 124.63Q362.97 124.63 359.68 122.34Q356.39 120.04 356.09 115.72H362.41Q362.61 117.68 363.98 118.76Q365.35 119.84 367.77 119.84Q370.08 119.84 371.41 118.92Q372.74 118.01 372.74 116.59Q372.74 115.37 371.75 114.63Q370.76 113.89 369.09 113.54L364.52 112.60Q356.70 110.97 356.70 104.86Q356.70 101.15 359.64 98.88Q362.59 96.60 367.49 96.60Q372.36 96.60 375.42 99.00Q378.48 101.40 378.58 105.54H372.57Q372.51 103.74 371.17 102.57Q369.82 101.40 367.64 101.40Q365.53 101.40 364.31 102.34Q363.09 103.28 363.09 104.65Q363.09 105.85 364.03 106.59Q364.97 107.34 366.65 107.72L371.47 108.71Q375.46 109.55 377.35 111.36Q379.24 113.16 379.24 116.10Q379.24 118.72 377.78 120.64Q376.32 122.55 373.76 123.59Q371.19 124.63 367.87 124.63ZM396.97 97.19V102.34H391.51V116.31Q391.51 117.75 392.10 118.30Q392.68 118.85 394.23 118.85H396.97V124.00H393.11Q389.03 124.00 387.06 122.35Q385.09 120.70 385.09 117.25V102.34H380.42V97.19H385.09V89.88H391.51V97.19Z" fill="var(--logo-word)"/><path d="M401.31 124.00V86.17H415.76Q419.93 86.17 422.96 87.64Q425.99 89.11 427.63 91.83Q429.27 94.55 429.27 98.25Q429.27 101.99 427.59 104.70Q425.92 107.42 422.86 108.91Q419.80 110.39 415.64 110.39H408.02V124.00ZM408.02 104.65H415.38Q418.76 104.65 420.71 102.94Q422.67 101.22 422.67 98.25Q422.67 95.31 420.71 93.61Q418.76 91.91 415.38 91.91H408.02ZM440.91 124.43Q436.89 124.43 434.27 122.41Q431.64 120.39 431.64 116.38Q431.64 113.34 433.12 111.67Q434.61 110.01 437.01 109.25Q439.41 108.49 442.18 108.21Q445.91 107.78 447.38 107.45Q448.85 107.12 448.85 105.74V105.54Q448.85 103.81 447.55 102.72Q446.24 101.63 443.95 101.63Q441.62 101.63 440.16 102.72Q438.70 103.81 438.57 105.52H432.40Q432.63 101.53 435.73 99.09Q438.82 96.65 444.08 96.65Q449.31 96.65 452.26 99.09Q455.20 101.53 455.20 105.72V124.00H448.90V120.22H448.80Q447.84 121.99 446.01 123.21Q444.18 124.43 440.91 124.43ZM442.48 119.68Q445.63 119.68 447.25 118.05Q448.88 116.41 448.88 114.07V111.18Q448.29 111.56 446.62 111.88Q444.94 112.19 442.96 112.50Q440.91 112.80 439.40 113.65Q437.88 114.50 437.88 116.33Q437.88 117.91 439.13 118.79Q440.37 119.68 442.48 119.68ZM466.48 86.17V124.00H460.08V86.17Z" fill="var(--logo-accent)"/></symbol>
+</svg>
+
+<div id="root"></div>
+<script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

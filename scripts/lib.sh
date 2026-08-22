@@ -29,6 +29,10 @@ have() { command -v "$1" >/dev/null 2>&1; }
 # installed, so `have java` is a false positive there. Actually run it.
 have_java() { java -version >/dev/null 2>&1; }
 
+# Node is optional in exactly the sense java is: one component needs it, and
+# `make setup` deliberately does not require it. Only `make ui` cares.
+have_node() { have node && have npm; }
+
 port_open() { nc -z localhost "$1" 2>/dev/null; }
 
 # The PID of whatever is listening on a TCP port, or empty. `port_open` only
@@ -95,6 +99,7 @@ load_env() {
     : "${ALPACA_MCP_PORT:=9091}"
     : "${IB_MCP_PORT:=9092}"
     : "${IB_GATEWAY_PORT:=5000}"
+    : "${INVESTPAL_WEB_PORT:=5173}"
 
     : "${LLM_PROVIDER:=anthropic}"
     : "${LLM_MODEL:=claude-sonnet-4-6}"
@@ -179,8 +184,8 @@ turso_row_count() {
 # so nothing is translated. pydantic-settings is case-insensitive, so the
 # uppercase exports bind to the lowercase settings fields.
 #
-# Values are emitted one per line and read back line by line by collect_env in
-# start.sh, so a value containing a newline would be split into fragments. That
+# Values are emitted one per line and read back line by line by collect_env
+# below, so a value containing a newline would be split into fragments. That
 # is why COINBASE_API_SECRET is kept on one line; the Coinbase server accepts the
 # `\n`-escaped form Coinbase's own key file uses, as well as base64.
 #
@@ -259,12 +264,35 @@ service_env() {
                 emit HF_HUB_OFFLINE 1
             fi
             ;;
+        investpal-web)
+            # Vite only exposes VITE_-prefixed variables to the bundle, so the
+            # API URL is renamed here rather than passed under its own name.
+            #
+            # Everything emitted here is compiled into a browser bundle and is
+            # therefore public. Never add a credential to this case.
+            emit VITE_INVESTPAL_API_URL "http://localhost:$INVESTPAL_API_PORT"
+            # Read by investpal-web/vite.config.ts, which sets strictPort so a
+            # busy port fails loudly instead of silently moving to 5174, where
+            # wait_for_service would never find it.
+            emit PORT "$INVESTPAL_WEB_PORT"
+            ;;
     esac
 }
 
 # Helper for service_env: skip empty values so a blank key never shadows a
 # service's own default with an empty string.
 emit() { [ -n "$2" ] && printf '%s=%s\n' "$1" "$2"; return 0; }
+
+# Collect a service's fan-out pairs into ENV_PAIRS. Written as a read loop
+# rather than mapfile so this keeps working on the bash 3.2 that ships with
+# macOS. Lives here rather than in start.sh because ui.sh needs it too.
+collect_env() {
+    ENV_PAIRS=()
+    local line
+    while IFS= read -r line; do
+        [ -n "$line" ] && ENV_PAIRS+=("$line")
+    done < <(service_env "$1")
+}
 
 # ── Process lifecycle ────────────────────────────────────────────────────────
 
@@ -423,6 +451,16 @@ service_rows() {
     if [ -d "$REPO_DIR/InteractiveBrokersMcpServer" ]; then
         echo "InteractiveBrokersMcpServer|interactive-brokers-mcp|$IB_MCP_PORT"
         echo "IB Client Portal Gateway|ib-gateway|$IB_GATEWAY_PORT"
+    fi
+    # Opt-in and unsupervised, so it is listed only when it is actually running
+    # or when something still holds its port. Guarding on the directory instead
+    # would be wrong: investpal-web/ is committed to this repo, so the test is
+    # always true and every cockpit-only user would see a permanent "stopped"
+    # row for a component they never asked for. The port_open half is what lets
+    # report_foreign_ports name a dev server that outlived `make stop` after its
+    # PID file is gone.
+    if [ -f "$LOG_DIR/investpal-web.pid" ] || port_open "$INVESTPAL_WEB_PORT"; then
+        echo "InvestPal Web UI|investpal-web|$INVESTPAL_WEB_PORT"
     fi
 }
 

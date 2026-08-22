@@ -47,6 +47,8 @@ else
 fi
 have_java && pass "java" "$(java -version 2>&1 | head -1 | sed 's/.*"\(.*\)".*/\1/')" \
     || info "java" "no runtime (Interactive Brokers only)"
+have_node && pass "node" "$(node -v 2>/dev/null)" \
+    || info "node" "not installed (local web UI only)"
 
 # ── Repositories ─────────────────────────────────────────────────────────────
 
@@ -404,6 +406,42 @@ for pair in "ALPACA_API_KEY:Alpaca:alpaca-mcp" "COINBASE_API_KEY:Coinbase:coinba
         info "$label credentials" "not configured"
     fi
 done
+
+# ── Local web UI (optional) ──────────────────────────────────────────────────
+# Never fails. `make ui` is opt-in, so its absence is not a fault, and doctor
+# exits non-zero on any FAIL.
+
+group "Local web UI (optional)"
+if ! have_node; then
+    info "node" "not installed — 'make ui' unavailable, nothing else affected"
+elif [ -d "$REPO_DIR/investpal-web/node_modules" ]; then
+    pass "investpal-web deps" "installed"
+else
+    info "investpal-web deps" "not installed — 'make ui' installs them on first run"
+fi
+
+if pid_alive investpal-web; then
+    if port_open "$INVESTPAL_WEB_PORT"; then
+        pass "investpal-web" "port $INVESTPAL_WEB_PORT"
+    else
+        warns "investpal-web" "process alive but port $INVESTPAL_WEB_PORT is closed"
+        fix "check logs/investpal-web.log"
+    fi
+elif port_open "$INVESTPAL_WEB_PORT"; then
+    warns "investpal-web" "port $INVESTPAL_WEB_PORT held by a process no PID file tracks"
+    fix "kill it, or change INVESTPAL_WEB_PORT in .env"
+else
+    info "investpal-web" "not running"
+fi
+
+# The single most useful thing doctor can say about this app. `make setup`
+# defaults the backend agent to no, so on a stock install every view works
+# except chat, which 500s — and InvestPal sends no CORS headers on a 500, so
+# the browser cannot even show the status.
+if [ -z "$ANTHROPIC_API_KEY$OPENAI_API_KEY$GOOGLE_API_KEY" ]; then
+    info "Web UI chat" "no provider key — the chat view will fail, other views work"
+    fix "chat calls POST /chat, which runs InvestPal's own agent; see .env.secrets"
+fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 
