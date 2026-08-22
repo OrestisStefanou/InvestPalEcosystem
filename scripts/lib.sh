@@ -218,13 +218,22 @@ service_env() {
             emit INTERACTIVE_BROKERS_PORTAL_BASE_URL "$IB_PORTAL_BASE_URL"
             ;;
         investpal-api|investpal-mcp)
+            # These URLs need the /mcp path. All four MCP servers serve the
+            # streamable-HTTP endpoint at /mcp and 404 at the root, and
+            # InvestPal passes the value straight to the transport without
+            # appending anything (dependencies.py, `connections`). Without the
+            # path the client gets a 404, the session dies, and the only clue
+            # is `McpError: Session terminated`. .mcp.json already gets this
+            # right, which is why the cockpit works and only the backend
+            # agent was affected.
+            #
             # LLM_PROVIDER, LLM_MODEL and MARKET_DATA_MCP_SERVER_URL have no
             # defaults in InvestPal/config.py, so pydantic kills both processes
             # at import without them. All three are derivable, so they are
             # always supplied and never asked for during setup.
             emit LLM_PROVIDER "$LLM_PROVIDER"
             emit LLM_MODEL "$LLM_MODEL"
-            emit MARKET_DATA_MCP_SERVER_URL "http://localhost:$MARKET_DATA_PORT"
+            emit MARKET_DATA_MCP_SERVER_URL "http://localhost:$MARKET_DATA_PORT/mcp"
             emit MCP_APP_SERVER_PORT "$INVESTPAL_MCP_PORT"
             emit TURSO_DB_PATH "$TURSO_DB_PATH"
             emit EMBEDDING_ENABLED "$EMBEDDING_ENABLED"
@@ -240,8 +249,8 @@ service_env() {
             # The backend agent gets broker tools only when asked. Left off, the
             # cockpit still reaches both brokers directly over .mcp.json.
             if [ "$CONNECT_BROKERS_TO_BACKEND" = "true" ]; then
-                emit ALPACA_MCP_SERVER_URL "http://localhost:$ALPACA_MCP_PORT"
-                emit COINBASE_MCP_SERVER_URL "http://localhost:$COINBASE_MCP_PORT"
+                emit ALPACA_MCP_SERVER_URL "http://localhost:$ALPACA_MCP_PORT/mcp"
+                emit COINBASE_MCP_SERVER_URL "http://localhost:$COINBASE_MCP_PORT/mcp"
             fi
 
             # Once the ~67MB model is cached, going offline skips a HuggingFace
