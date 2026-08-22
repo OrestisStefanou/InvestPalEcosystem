@@ -241,8 +241,13 @@ import_service_env() {
         ok "CoinbaseMcpServer/.env" "imported"
         import_kv "$coinbase" MCP_PORT            "$ENV_FILE" COINBASE_MCP_PORT
         import_kv "$coinbase" READ_ONLY           "$ENV_FILE" COINBASE_READ_ONLY
-        import_kv "$coinbase" COINBASE_KEY_NAME   "$SECRETS_FILE" COINBASE_API_KEY
-        import_kv "$coinbase" COINBASE_KEY_SECRET "$SECRETS_FILE" COINBASE_API_SECRET
+        # CoinbaseMcpServer used to name these fields COINBASE_KEY_NAME and
+        # COINBASE_KEY_SECRET. Both spellings are imported, newer last so it
+        # wins; import_kv is a no-op for a key the source file does not have.
+        import_kv "$coinbase" COINBASE_KEY_NAME    "$SECRETS_FILE" COINBASE_API_KEY
+        import_kv "$coinbase" COINBASE_KEY_SECRET  "$SECRETS_FILE" COINBASE_API_SECRET
+        import_kv "$coinbase" COINBASE_API_KEY     "$SECRETS_FILE" COINBASE_API_KEY
+        import_kv "$coinbase" COINBASE_API_SECRET  "$SECRETS_FILE" COINBASE_API_SECRET
         IMPORTED_FROM+=("$coinbase")
     fi
 
@@ -385,8 +390,8 @@ configure_brokers() {
 
     if [ -z "$(env_get "$SECRETS_FILE" COINBASE_API_KEY)" ] || [ "$FORCE" = "1" ]; then
         if ask_yn "Connect Coinbase (crypto)?" "n"; then
-            ask_secret key "COINBASE_API_KEY (the key name)"
-            ask_secret secret "COINBASE_API_SECRET (base64-encoded)"
+            ask_secret key "COINBASE_API_KEY (the \"name\" from your key file)"
+            ask_secret secret "COINBASE_API_SECRET (the \"privateKey\", pasted as-is)"
             if [ -n "$key" ]; then
                 set_kv "$SECRETS_FILE" COINBASE_API_KEY "$key"
                 set_kv "$SECRETS_FILE" COINBASE_API_SECRET "$secret"

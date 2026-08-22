@@ -35,18 +35,12 @@ BASE_URL = "http://localhost:8000"   # URL of the InvestPal REST API
 
 InvestPal is single-user, so there is no user id to configure.
 
-### Optional: brokerage credentials
+### Brokerage credentials
 
-To enable trading features, create `InvestPal/dev-ui/.env`:
-
-```env
-ALPACA_MCP_SERVER_API_KEY=your_alpaca_key
-ALPACA_MCP_SERVER_API_SECRET=your_alpaca_secret
-COINBASE_MCP_SERVER_API_KEY=your_coinbase_key_name
-COINBASE_MCP_SERVER_API_SECRET=your_coinbase_key_secret
-```
-
-If the `.env` file is absent or the variables are empty the app works in conversational-only mode (market data and advisor features are still fully available).
+Nothing to configure here. The dev UI holds no credentials: brokerage keys live in the root
+`.env.secrets` and are read by the Alpaca and Coinbase MCP servers themselves. With them set,
+trading features work in the dev UI automatically. Without them, the app works in
+conversational-only mode, and market data and advisor features are still fully available.
 
 ---
 
@@ -67,7 +61,6 @@ Streamlit opens a browser tab at `http://localhost:8501`.
 | Chat interface | Send messages and receive AI responses |
 | Session management | A new session is created automatically on first load; you can start a fresh one at any time |
 | Message history | The full conversation is displayed with user / assistant styling |
-| Credential pass-through | Alpaca and Coinbase keys are forwarded to the InvestPal backend on each request |
 | Connection status | Sidebar shows whether the backend is reachable |
 | Message counter | Tracks the number of turns in the current session |
 

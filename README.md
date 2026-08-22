@@ -110,9 +110,10 @@ survive re-cloning a service repo, and the three name collisions between service
 
 The split is a trust boundary, not a filing system: the Claude Code agent is denied
 read access to `.env.secrets` by the `permissions.deny` rules in
-`.claude/settings.json`. Note the limit of that — `make claude` exports these values
-into Claude Code's own environment, because `.mcp.json` interpolates them into request
-headers and the broker MCP servers accept credentials no other way.
+`.claude/settings.json`. Nothing in that file reaches Claude Code's own environment.
+Each broker MCP server reads its credentials from its own process environment, which
+`scripts/lib.sh` populates at start time, so a secret lives in exactly one process and
+never travels over an MCP connection.
 
 ### Variable reference
 
@@ -134,7 +135,7 @@ the two example files document the rest inline.
 | `LLM_PROVIDER` / `LLM_MODEL` | `.env` | `anthropic` / `claude-sonnet-4-6` | Backend agent only. Do not blank them: InvestPal gives them no default and will not start |
 | `ANTHROPIC_API_KEY` | `.env.secrets` | unset | Backend agent only |
 | `ALPACA_API_KEY` / `ALPACA_API_SECRET` | `.env.secrets` | unset | Optional |
-| `COINBASE_API_KEY` / `COINBASE_API_SECRET` | `.env.secrets` | unset | Optional; the secret must be base64-encoded |
+| `COINBASE_API_KEY` / `COINBASE_API_SECRET` | `.env.secrets` | unset | Optional; paste the `name` and `privateKey` from Coinbase's key file as-is |
 | `COIN_GECKO_API_KEY` | `.env.secrets` | unset | Optional; only raises CoinGecko's rate limits |
 
 ### Backend agent (optional)
@@ -164,15 +165,16 @@ IB authenticates through a browser login to its own gateway rather than with API
 
 | Command | What it does |
 |---|---|
-| `make claude` | Launch the Claude Code cockpit with credentials loaded |
+| `make claude` | Launch the Claude Code cockpit with `.env` loaded |
 | `make start` / `make stop` | Start or stop all backend services |
 | `make status` | Which services are up |
 | `make doctor` | Full diagnosis of a broken or drifted install |
 | `make logs` | Tail every service log |
 | `make pull` | Pull the latest changes across all repos |
 
-Launch the cockpit with `make claude` rather than bare `claude`: `.mcp.json` reads your
-brokerage keys from the environment, and a file on disk does not populate it on its own.
+`make claude` loads `.env` and checks that setup has been run, but bare `claude` works
+too. Brokerage keys are not needed in the cockpit's environment: the broker servers hold
+their own.
 
 When anything looks wrong, `make doctor` is the first move. It checks the toolchain,
 the repos, config coherence, port agreement with `.mcp.json`, every running service,

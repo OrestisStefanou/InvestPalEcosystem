@@ -53,7 +53,7 @@ This gives Claude access to real-time market data and the InvestPal advisor tool
 
 ### Full setup (with trading access)
 
-Add the Alpaca, Coinbase and Interactive Brokers entries to include brokerage tools. Alpaca and Coinbase credentials are passed as request headers so they never touch the server's environment; Interactive Brokers uses no credentials at all.
+Add the Alpaca, Coinbase and Interactive Brokers entries to include brokerage tools. None of them carry credentials: each brokerage server reads its own keys from the root `.env.secrets` at start time, and Interactive Brokers uses no API keys at all.
 
 ```json
 {
@@ -76,31 +76,15 @@ Add the Alpaca, Coinbase and Interactive Brokers entries to include brokerage to
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://127.0.0.1:9090/mcp",
-        "--header",
-        "X-Coinbase-API-Key:${API_KEY}",
-        "--header",
-        "X-Coinbase-API-Secret:${API_SECRET}"
-      ],
-      "env": {
-        "API_KEY": "<your coinbase api key name>",
-        "API_SECRET": "<your coinbase api secret>"
-      }
+        "http://127.0.0.1:9090/mcp"
+      ]
     },
     "Alpaca MCP Server": {
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://127.0.0.1:9091/mcp",
-        "--header",
-        "X-Alpaca-Api-Key:${API_KEY}",
-        "--header",
-        "X-Alpaca-Api-Secret:${API_SECRET}"
-      ],
-      "env": {
-        "API_KEY": "<your alpaca api key>",
-        "API_SECRET": "<your alpaca api secret>"
-      }
+        "http://127.0.0.1:9091/mcp"
+      ]
     },
     "Interactive Brokers MCP Server": {
       "command": "npx",
@@ -113,9 +97,9 @@ Add the Alpaca, Coinbase and Interactive Brokers entries to include brokerage to
 }
 ```
 
-Replace the placeholder values with your actual credentials. If you only use one brokerage, simply omit the other entries.
+If you only use one brokerage, simply omit the other entries. A brokerage server whose keys are not in `.env.secrets` starts normally but advertises no tools, so its entry is harmless either way.
 
-The Interactive Brokers entry carries no headers: it authenticates through the IB Client Portal Gateway rather than API keys. Its tools return auth errors until that gateway is running on `https://localhost:5000` and you have logged into it in a browser.
+Interactive Brokers authenticates through the IB Client Portal Gateway rather than API keys. Its tools return auth errors until that gateway is running on `https://localhost:5000` and you have logged into it in a browser.
 
 ---
 

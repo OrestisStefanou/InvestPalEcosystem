@@ -91,10 +91,11 @@ server is required.
 | Workflows and results | Cron expression, `last_run_at`, `next_run_at`, running lock, and every stored report |
 | Sessions and messages | Conversation history |
 
-Brokerage credentials are **not** stored here. They travel as per-request headers
-(`X-Alpaca-Api-Key` and friends) and are forgotten once the request completes. `.env.secrets` holds
-them at mode 600 and is denied to the Claude Code agent by the `permissions.deny` rules in
-`.claude/settings.json`.
+Brokerage credentials are **not** stored here. `.env.secrets` holds them at mode 600 and is
+denied to the Claude Code agent by the `permissions.deny` rules in `.claude/settings.json`.
+`scripts/lib.sh` hands each one to its own broker MCP server at start time and to nothing else,
+so a credential exists in exactly one process and never travels over an MCP connection. A broker
+server started without its credentials comes up healthy and registers no tools.
 
 Turso Cloud sync is optional and entirely manual. Nothing syncs on startup, on shutdown, or on a
 timer. See [Turso Cloud sync](../README.md#turso-cloud-sync).

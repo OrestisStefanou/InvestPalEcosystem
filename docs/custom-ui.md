@@ -51,24 +51,23 @@ Repeat this call in a loop to continue the conversation. Start a new session (st
 
 ---
 
-## Passing Brokerage Credentials (Optional)
+## Brokerage Credentials
 
-If you want the advisor to access the brokerage account, pass credentials as request headers on the `/chat` call. These are forwarded by InvestPal to the Alpaca and Coinbase MCP servers — they are never stored.
+Your client passes no credentials. Brokerage keys live in the root `.env.secrets` and are read
+by the Alpaca and Coinbase MCP servers themselves, so a plain `/chat` call reaches the brokerage
+tools with no extra headers:
 
 ```bash
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
-  -H "X-Alpaca-Api-Key: <alpaca key>" \
-  -H "X-Alpaca-Api-Secret: <alpaca secret>" \
-  -H "X-Coinbase-Api-Key: <coinbase key name>" \
-  -H "X-Coinbase-Api-Secret: <coinbase secret>" \
   -d '{
     "session_id": "<session_id>",
     "message": "Show me my current portfolio"
   }'
 ```
 
-The Coinbase secret must be base64-encoded. Omit the headers entirely to run in conversational-only mode.
+With no keys configured the advisor runs in conversational-only mode: the broker servers
+register no tools, so it simply has none to call.
 
 ---
 

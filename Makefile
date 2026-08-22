@@ -14,7 +14,7 @@ help:
 	@echo "First time here:"
 	@echo "  make setup      Everything: prerequisites, clone, install, configure, start"
 	@echo "                  YES=1 to take every default, FORCE=1 to reconfigure"
-	@echo "  make claude     Launch the Claude Code cockpit with credentials loaded"
+	@echo "  make claude     Launch the Claude Code cockpit"
 	@echo ""
 	@echo "Day to day:"
 	@echo "  make start      Start all backend services"
@@ -93,9 +93,14 @@ doctor:
 status:
 	@bash scripts/status.sh
 
-# Launch Claude Code with the root config loaded. .mcp.json interpolates
-# ${ALPACA_API_KEY} and friends from the environment, which a file on disk does
-# not populate on its own — this is what closes that gap.
+# Launch Claude Code with .env loaded. .env.secrets is deliberately NOT sourced:
+# the broker MCP servers read their credentials from their own process
+# environment, so no secret ever needs to exist inside Claude Code's. That used
+# not to be true, back when .mcp.json interpolated the keys into request headers.
+#
+# Bare `claude` now works just as well. This target survives as a guard: it fails
+# fast when setup has not been run or the CLI is missing, and it exports .env for
+# anything in the session that wants it.
 claude:
 	@if [ ! -f "$(CURDIR)/.env" ]; then \
 		echo "No .env found. Run 'make setup' first."; exit 1; \
@@ -103,9 +108,7 @@ claude:
 	@if ! command -v claude >/dev/null 2>&1; then \
 		echo "The 'claude' CLI is not on PATH. See https://claude.com/claude-code"; exit 1; \
 	fi
-	@set -a; . "$(CURDIR)/.env"; \
-		[ -f "$(CURDIR)/.env.secrets" ] && . "$(CURDIR)/.env.secrets"; \
-		set +a; exec claude
+	@set -a; . "$(CURDIR)/.env"; set +a; exec claude
 
 start:
 	@bash scripts/start.sh

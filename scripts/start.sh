@@ -45,9 +45,10 @@ start_service "market-data-mcp" "$MARKET_DATA_PORT" "$REPO_DIR/MarketDataMcpServ
 wait_for_service "MarketDataMcpServer" "market-data-mcp" "$MARKET_DATA_PORT"
 
 # ── 2. AlpacaMcpServer ───────────────────────────────────────────────────────
-# Optional, like Coinbase below: without credentials the server exits on startup,
-# and the persona is written to work without broker tools. Gated all the same, so
-# a missing key is reported here instead of showing up as a dead MCP server.
+# Optional, like Coinbase below. Without credentials the server still starts and
+# stays healthy, it just registers no tools, and the persona is written to work
+# without broker tools. Gated all the same, so a server that fails to come up is
+# reported here instead of showing up as a dead MCP server.
 collect_env alpaca-mcp
 start_service "alpaca-mcp" "$ALPACA_MCP_PORT" "$REPO_DIR/AlpacaMcpServer" "uv run python main.py" "${ENV_PAIRS[@]}"
 wait_for_service "AlpacaMcpServer" "alpaca-mcp" "$ALPACA_MCP_PORT" 30 optional || OPTIONAL_FAILED=true

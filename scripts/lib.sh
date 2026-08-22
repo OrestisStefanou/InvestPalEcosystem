@@ -172,13 +172,17 @@ turso_row_count() {
 }
 
 # Echo KEY=VALUE pairs, one per line, for a given service. This is the single
-# place ports, cross-service URLs and credential name mappings are defined.
+# place ports and cross-service URLs are defined.
 #
-# Three collisions are resolved here and nowhere else: MCP_PORT and READ_ONLY
-# are each used by three different services, and Coinbase's settings fields are
-# coinbase_key_name / coinbase_key_secret rather than the COINBASE_API_KEY /
-# COINBASE_API_SECRET spelling .mcp.json uses. pydantic-settings is
-# case-insensitive, so the uppercase exports bind correctly.
+# Two collisions are resolved here and nowhere else: MCP_PORT and READ_ONLY are
+# each used by three different services. Credential names now agree everywhere,
+# so nothing is translated. pydantic-settings is case-insensitive, so the
+# uppercase exports bind to the lowercase settings fields.
+#
+# Values are emitted one per line and read back line by line by collect_env in
+# start.sh, so a value containing a newline would be split into fragments. That
+# is why COINBASE_API_SECRET is kept on one line; the Coinbase server accepts the
+# `\n`-escaped form Coinbase's own key file uses, as well as base64.
 #
 # Exporting extra variables is safe: pydantic's EnvSettingsSource only looks up
 # declared field names, and extra="forbid" applies to keys inside a dotenv file,
@@ -205,8 +209,8 @@ service_env() {
         coinbase-mcp)
             emit MCP_PORT "$COINBASE_MCP_PORT"
             emit READ_ONLY "$COINBASE_READ_ONLY"
-            emit COINBASE_KEY_NAME "$COINBASE_API_KEY"
-            emit COINBASE_KEY_SECRET "$COINBASE_API_SECRET"
+            emit COINBASE_API_KEY "$COINBASE_API_KEY"
+            emit COINBASE_API_SECRET "$COINBASE_API_SECRET"
             ;;
         interactive-brokers-mcp)
             emit MCP_PORT "$IB_MCP_PORT"

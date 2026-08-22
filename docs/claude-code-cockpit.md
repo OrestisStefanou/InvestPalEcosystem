@@ -64,10 +64,9 @@ cd InvestPalEcosystem
 make claude
 ```
 
-Use `make claude` rather than bare `claude`. It sources `.env` and `.env.secrets` before
-launching, which is what lets `.mcp.json` resolve `${ALPACA_API_KEY}` and friends into the
-request headers the brokerage servers expect. Launched without it, the brokerage tools list
-but fail when called.
+`make claude` sources `.env` before launching and fails fast if setup has not been run, but
+bare `claude` works too. No credential needs to exist in the cockpit's environment: each
+brokerage server holds its own, so nothing sensitive is sent over the MCP connection.
 
 On startup the `SessionStart` hook runs and injects three things into the session:
 
