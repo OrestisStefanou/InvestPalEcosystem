@@ -170,6 +170,14 @@ check_prereqs() {
         warn "java" "missing (Interactive Brokers only)"
     fi
 
+    # Optional: only the local web UI needs it. Deliberately not counted in
+    # `missing`, so a cockpit-only install never has to install Node.
+    if have_node; then
+        ok "node" "$(node -v 2>/dev/null)"
+    else
+        warn "node" "missing (local web UI only)"
+    fi
+
     if [ "$missing" -ne 0 ]; then
         echo ""
         echo -e "${RED}Install the missing prerequisites above, then run 'make setup' again.${NC}"
@@ -346,7 +354,7 @@ configure_backend_agent() {
     echo ""
     note "The cockpit does not need an LLM key — there, Claude Code is the LLM."
     note "A key is only for InvestPal's own agent: the /chat REST endpoint, the"
-    note "Streamlit dev UI, and workflows the backend runs itself."
+    note "local web UI, and workflows the backend runs itself."
     if ! ask_yn "Enable InvestPal's own backend agent?" "n"; then
         ok "Backend agent" "skipped"
         return 0

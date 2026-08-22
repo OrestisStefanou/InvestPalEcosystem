@@ -145,4 +145,5 @@ The market data server draws on public sources and needs no paid subscription.
 - [Skills](skills.md), the fifteen analytical procedures the advisor follows
 - [Claude Code cockpit](claude-code-cockpit.md)
 - [Claude Desktop](claude-desktop.md)
+- [The local web UI](web-ui.md)
 - [Custom UI over the REST API](custom-ui.md)

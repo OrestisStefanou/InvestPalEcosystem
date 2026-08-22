@@ -5,7 +5,7 @@ REPOS := \
 	https://github.com/OrestisStefanou/CoinbaseMcpServer \
 	https://github.com/OrestisStefanou/InteractiveBrokersMcpServer
 
-.PHONY: setup doctor status claude clone pull install start stop logs help \
+.PHONY: setup doctor status claude clone pull install start stop logs help ui ui_stop \
 	turso_status turso_first_push turso_first_pull turso_push turso_pull turso_verify
 
 help:
@@ -23,6 +23,10 @@ help:
 	@echo "  make doctor     Diagnose a broken or drifted install"
 	@echo "  make logs       Tail logs from all services"
 	@echo "  make pull       Pull latest changes in all repositories"
+	@echo ""
+	@echo "Front-ends:"
+	@echo "  make ui         Start the local web UI on http://localhost:5173 (needs Node)"
+	@echo "  make ui_stop    Stop just the web UI"
 	@echo ""
 	@echo "  Configuration lives in .env (and credentials in .env.secrets),"
 	@echo "  both at the root of this repo. See .env.example."
@@ -115,6 +119,15 @@ start:
 
 stop:
 	@bash scripts/stop.sh
+
+# The only target that needs Node, which is why it is not part of `make start`
+# and nothing on the `make setup` path touches npm. `make stop` still stops it:
+# stop.sh sweeps every PID file rather than a fixed list.
+ui:
+	@bash scripts/ui.sh start
+
+ui_stop:
+	@bash scripts/ui.sh stop
 
 logs:
 	@tail -f logs/*.log
