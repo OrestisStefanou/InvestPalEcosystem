@@ -259,7 +259,10 @@ def _workflow_instructions(due, stuck) -> str:
         "",
         "1. Launch a subagent (Task tool) whose goal is the workflow's description. The "
         "subagent must use the InvestPal skills (`getSkillDefinitions` then `getSkill`), "
-        "market-data tools, and portfolio tools as needed, and return a concise report.",
+        "market-data tools, and portfolio tools as needed, and return a concise report. "
+        "The market-data server runs in tool-discovery mode, so the subagent has to call "
+        "`available_categories` and `activate_category` before any data tool appears in "
+        "its own tool list.",
         "2. Persist the report: call `storeWorkflowResult` with the workflow_id, "
         "workflow_name set to the workflow's name shown below, and output=<the report>.",
         "",
@@ -342,6 +345,12 @@ async def _build_context(session_id: str | None) -> str:
         "user_id, so never pass one. Adopt the advisor persona (loaded as described "
         "below) and use the connected MCP tools (investpal, market-data, alpaca, "
         "coinbase, interactive-brokers).\n"
+        "market-data is the OpenBB server in tool-discovery mode: it starts with about "
+        "six admin tools and the rest disabled. Call `available_categories`, then "
+        "`activate_category` for what a question needs, before expecting a data tool to "
+        "be there. Activation lasts for this session. An empty result from a commodity "
+        "or Federal Reserve tool usually means FRED_API_KEY is unset rather than that "
+        "the data does not exist; `make doctor` says which keys are configured.\n"
     )
 
     if persona:

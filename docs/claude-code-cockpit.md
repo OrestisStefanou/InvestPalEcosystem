@@ -18,7 +18,7 @@ Both connect to the same MCP servers, but they are used differently:
 | Best for | Occasional questions inside a normal Claude chat | A power-user / personal advisor terminal |
 
 The cockpit is configured entirely within this repo. Nothing in the nested service repos
-(`InvestPal/`, `MarketDataMcpServer/`, etc.) is modified.
+(`InvestPal/`, `AlpacaMcpServer/`, etc.) is modified.
 
 ---
 
@@ -36,7 +36,7 @@ These files make up the cockpit. They ship with the repo; you do not need to cre
 
 | File | Role |
 |---|---|
-| `.mcp.json` | Connects Claude Code to the five MCP servers (investpal, market-data, alpaca, coinbase, interactive-brokers) |
+| `.mcp.json` | Connects Claude Code to the five MCP servers (investpal, market-data, alpaca, coinbase, interactive-brokers). `market-data` points at port 8083, the OpenBB **discovery** instance |
 | `CLAUDE.md` | The cockpit's operating contract: memory model, persona source, workflow rules, repo boundary |
 | `.claude/settings.json` | Registers the `SessionStart` hook |
 | `scripts/claude_cockpit/session_start.py` | The hook: loads the advisor persona, the client profile and reminders, and surfaces due workflows |
@@ -89,6 +89,16 @@ give it that brokerage's credentials, so if they are missing here you either ski
 question or the keys are not in `.env.secrets`. `interactive-brokers` needs no keys, but its
 tools fail until the IB Client Portal Gateway is running and logged in.
 
+### `market-data` starts small on purpose
+
+`market-data` is the [OpenBB MCP server](market-data.md) in tool-discovery mode, so the cockpit
+sees about six admin tools rather than all 287. The cockpit calls `available_categories` and
+`activate_category` to switch on what a question needs, and the activation lasts for that
+session. A short tool list there is the design, not a fault.
+
+InvestPal's own backend agent talks to a second OpenBB instance on port 8082 with a fixed set
+of around 153 tools, because it cannot hold a session open to activate anything.
+
 ## Step 3: Use it
 
 Just talk to it. Your profile and reminders are already in context from the hook; on your first
@@ -133,6 +143,7 @@ the trigger). It does not run them while Claude Code is closed.
 | Alpaca credentials | `ALPACA_API_KEY` / `ALPACA_API_SECRET` in `.env.secrets`, exported by `make claude` | unset |
 | Coinbase credentials | `COINBASE_API_KEY` / `COINBASE_API_SECRET` in `.env.secrets`, exported by `make claude` | unset |
 | Interactive Brokers session | Browser login at `https://localhost:5000` — no keys anywhere | not authenticated |
+| Market data keys | `FRED_API_KEY` (commodities, Fed series) and `FMP_API_KEY` (ratios, world news, estimates) in `.env.secrets` | unset; see [Market data](market-data.md) |
 
 Credentials live in `.env.secrets`, which is gitignored, mode 600, and denied to the agent by
 the `permissions.deny` rules in `.claude/settings.json`. `.mcp.json` reads them from the
@@ -150,6 +161,8 @@ list without credentials; only calling them requires the keys.
 | `/mcp` shows a server as failed | The corresponding service is not running, or the URL/port differs from `.mcp.json`. Check `make logs`. |
 | InvestPal will not start at all | If `TURSO_SYNC_URL` is set, both InvestPal servers refuse to start until the local database is initialised with `make turso_first_push` or `make turso_first_pull` (see `InvestPal/docs/turso_sync.md`). Run `make turso_status` to see which applies. |
 | A workflow stopped running entirely | It is probably stuck in `status = running` after a crashed run. The hook reports these; clear it with `updateAgentWorkflow(workflow_id, status="active")`. |
+| A market-data tool is not in the tool list | Expected. That server runs in discovery mode; ask it for `available_categories`, then `activate_category`. See [Market data](market-data.md). |
+| A market-data tool returns nothing at all | Usually a missing provider key rather than missing data. `make doctor` reports `FRED_API_KEY` and `FMP_API_KEY`; `logs/market-data-mcp.log` has the provider error. |
 | `searchUserConversationNotes` returns nothing | Either `EMBEDDING_ENABLED=false`, or the notes predate the current embedding model. Run `make backfill_embeddings` in `InvestPal/`. |
 | Brokerage tool calls fail | Claude Code was launched without the credentials in its environment. Quit and relaunch with `make claude`. |
 | `interactive-brokers` tools return an auth error | The IB Client Portal Gateway is down or its session expired. `make start` reports both; open `https://localhost:5000` and log in again. |

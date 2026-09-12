@@ -8,6 +8,7 @@
 <p align="center">
   <a href="docs/architecture.md">Architecture</a> &nbsp;·&nbsp;
   <a href="docs/skills.md">Skills</a> &nbsp;·&nbsp;
+  <a href="docs/market-data.md">Market data</a> &nbsp;·&nbsp;
   <a href="#setup">Setup</a> &nbsp;·&nbsp;
   <a href="#ways-to-use-investpal">Ways to use it</a> &nbsp;·&nbsp;
   <a href="https://orestisstefanou.github.io/investpal/">Website</a>
@@ -22,7 +23,7 @@ This is the entry-point repository for the InvestPal app. The app is composed of
 | Service | Repository | Port |
 |---|---|---|
 | InvestPal (REST API + MCP App) | [OrestisStefanou/InvestPal](https://github.com/OrestisStefanou/InvestPal) | 8000 / 9000 |
-| Market Data MCP Server | [OrestisStefanou/MarketDataMcpServer](https://github.com/OrestisStefanou/MarketDataMcpServer) | 8082 |
+| Market Data (OpenBB) | [OpenBB-finance/OpenBB](https://github.com/OpenBB-finance/OpenBB), pinned venv | 8082 / 8083 |
 | Alpaca MCP Server | [OrestisStefanou/AlpacaMcpServer](https://github.com/OrestisStefanou/AlpacaMcpServer) | 9091 |
 | Coinbase MCP Server | [OrestisStefanou/CoinbaseMcpServer](https://github.com/OrestisStefanou/CoinbaseMcpServer) | 9090 |
 | Interactive Brokers MCP Server | [OrestisStefanou/InteractiveBrokersMcpServer](https://github.com/OrestisStefanou/InteractiveBrokersMcpServer) | 9092 |
@@ -38,7 +39,7 @@ fit together, see [Architecture](docs/architecture.md).
 |---|---|
 | AI Investment Advisor | Powered by OpenAI, Google Gemini, or Anthropic Claude |
 | [Skills](docs/skills.md) | Fifteen written analytical procedures, drawn from Graham and Dodd and Howard Marks, that the advisor follows instead of reasoning ad hoc |
-| Real-time Market Data | Stocks, ETFs, crypto prices, economic indicators, commodities, market news |
+| [Market Data](docs/market-data.md) | Stocks, ETFs, filings, financial statements, economic indicators, commodities and news, through the OpenBB MCP server. Most of it needs no API key |
 | Personalized Advice | Adapts to your risk tolerance, investment horizon, and goals |
 | Cross-session Memory | Recalls notes from previous conversations, searchable by meaning — embeddings are computed locally, so note text never leaves the machine |
 | Reminders | Agent can create and track action items for you |
@@ -47,7 +48,9 @@ fit together, see [Architecture](docs/architecture.md).
 | Coinbase Integration *(optional)* | Read your crypto portfolio and place orders |
 | Interactive Brokers Integration *(optional)* | Read your IB accounts, positions, balances and trades, and place orders |
 
-> **You do not need Alpaca, Coinbase or Interactive Brokers accounts.** InvestPal is fully functional as a conversational investment research tool using only real-time market data.
+> **You do not need Alpaca, Coinbase or Interactive Brokers accounts.** InvestPal is fully functional as a conversational investment research tool using only market data.
+>
+> One free registration key is worth having: FRED covers commodity prices and most Federal Reserve series, which have no other free provider. `make setup` asks for it. See [Market data](docs/market-data.md).
 
 ---
 
@@ -69,8 +72,7 @@ Once the backend services are running you can interact with InvestPal through se
 `make setup` checks all of these and tells you what to install.
 
 - **git**, **make**, **curl**, **nc** (pre-installed on macOS and most Linux)
-- **Go** 1.25+
-- **[uv](https://docs.astral.sh/uv/)** — supplies the Python 3.13 runtimes for the four Python services
+- **[uv](https://docs.astral.sh/uv/)** — supplies the Python runtimes for the four service repos and for the pinned OpenBB venv at `.venvs/openbb`
 - **Java** 1.8+ — only for the Interactive Brokers gateway; skip it if you are not using IB
 - **Node** 20+ — only for the local web UI (`make ui`); skip it if you use the cockpit
 
@@ -84,10 +86,11 @@ cd InvestPalEcosystem
 make setup
 ```
 
-That is the whole thing. `make setup` checks prerequisites, clones the five service
-repos, installs their dependencies, writes your configuration, prepares the database
-and search index, and starts everything. It asks three optional questions, all of
-which you can skip with Enter. Run `make setup YES=1` to skip them for you.
+That is the whole thing. `make setup` checks prerequisites, clones the four service
+repos, installs their dependencies (including the pinned OpenBB venv that serves market
+data), writes your configuration, prepares the database and search index, and starts
+everything. Every question it asks can be skipped with Enter. Run `make setup YES=1` to
+skip them for you.
 
 **You do not need an API key.** In the Claude Code cockpit, Claude Code is the LLM.
 An LLM key is only for InvestPal's own agent — see [Backend agent](#backend-agent-optional) below.
@@ -101,7 +104,7 @@ Two files at the root of this repo, both gitignored, both created by `make setup
 
 | File | Contents |
 |---|---|
-| `.env` | Ports, URLs, cache TTLs, feature switches. See [`.env.example`](.env.example) |
+| `.env` | Ports, URLs, feature switches. See [`.env.example`](.env.example) |
 | `.env.secrets` | API keys and tokens, mode 600. See [`.env.secrets.example`](.env.secrets.example) |
 
 You never edit a `.env` inside a service repo. At start time `scripts/lib.sh` exports
@@ -123,8 +126,9 @@ the two example files document the rest inline.
 
 | Variable | File | Default | Description |
 |---|---|---|---|
-| `SEC_EDGAR_USER_AGENT` | `.env` | placeholder | EDGAR returns 403 without a real contact address |
-| `MARKET_DATA_PORT` | `.env` | `8082` | The Go server's own default is 8080; the start script gates 8082 |
+| `MARKET_DATA_PORT` | `.env` | `8082` | Static OpenBB instance; what InvestPal's own agents use |
+| `MARKET_DATA_DISCOVERY_PORT` | `.env` | `8083` | Tool-discovery OpenBB instance; what `.mcp.json` points Claude clients at |
+| `TOKEN_INTENSIVE_TOOLS` | `.env` | see `.env.example` | Tools the workflow agent paces. JSON list, single-quoted |
 | `INVESTPAL_MCP_PORT` | `.env` | `9000` | Must agree with `.mcp.json`; `make doctor` cross-checks |
 | `ALPACA_READ_ONLY` | `.env` | `false` | `true` hides the order-placing tools from the advisor |
 | `COINBASE_READ_ONLY` | `.env` | `false` | As above |
@@ -137,7 +141,8 @@ the two example files document the rest inline.
 | `ANTHROPIC_API_KEY` | `.env.secrets` | unset | Backend agent only |
 | `ALPACA_API_KEY` / `ALPACA_API_SECRET` | `.env.secrets` | unset | Optional |
 | `COINBASE_API_KEY` / `COINBASE_API_SECRET` | `.env.secrets` | unset | Optional; paste the `name` and `privateKey` from Coinbase's key file as-is |
-| `COIN_GECKO_API_KEY` | `.env.secrets` | unset | Optional; only raises CoinGecko's rate limits |
+| `FRED_API_KEY` | `.env.secrets` | unset | Free, registration only. Without it commodity prices and most Fed series return nothing |
+| `FMP_API_KEY` | `.env.secrets` | unset | Optional, 250 req/day free. Adds ratios, world news, estimates, peers |
 
 ### Backend agent (optional)
 
@@ -190,13 +195,14 @@ exits non-zero on a real failure, so it also works as a gate in a script.
 |---|---|---|
 | InvestPal REST API | 8000 | Main API — docs at `http://localhost:8000/docs` |
 | InvestPal MCP App | 9000 | Internal MCP server at `http://localhost:9000/mcp` |
-| MarketDataMcpServer | 8082 | Market data (stocks, crypto, economics, commodities, news) from keyless sources |
+| Market Data (OpenBB) | 8082 | Static tool set (~153 tools) at `http://localhost:8082/mcp`; InvestPal's agents use this one |
+| Market Data Discovery (OpenBB) | 8083 | Tool discovery at `http://localhost:8083/mcp`; Claude Code and Claude Desktop use this one |
 | AlpacaMcpServer | 9091 | Alpaca brokerage integration at `http://localhost:9091/mcp` |
 | CoinbaseMcpServer | 9090 | Coinbase integration at `http://localhost:9090/mcp` |
 | InteractiveBrokersMcpServer | 9092 | Interactive Brokers integration at `http://localhost:9092/mcp` |
 | IB Client Portal Gateway | 5000 | Interactive Brokers' own Java gateway at `https://localhost:5000`, started only if installed |
 
-**Startup order:** MarketDataMcpServer starts first (required by InvestPal), followed by the Alpaca, Coinbase and Interactive Brokers servers, then the InvestPal REST API and MCP App. `make start` health-gates MarketDataMcpServer and the InvestPal MCP App, so it does not return until both are listening.
+**Startup order:** the two market-data instances start first, followed by the Alpaca, Coinbase and Interactive Brokers servers, then the InvestPal REST API and MCP App. `make start` health-gates the static market-data instance (InvestPal will not start without it) and the InvestPal MCP App, so it does not return until both are listening. The discovery instance is gated non-fatally: it only serves the Claude clients, so its failure warns rather than aborting startup. Both load the full OpenBB platform and can take up to 90 seconds on a cold start.
 
 The Interactive Brokers block is skipped entirely when `InteractiveBrokersMcpServer/` is not cloned. When it is, the IB Client Portal Gateway starts before the MCP server and is gated on port 5000 non-fatally: a missing gateway, a missing Java runtime, or a gateway that fails to come up produces a warning rather than aborting startup. Once the gateway is listening, `make start` also reports whether its session is authenticated.
 

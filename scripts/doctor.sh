@@ -39,11 +39,17 @@ group "Toolchain"
 for tool in git make uv curl nc python3; do
     if have "$tool"; then pass "$tool"; else fails "$tool" "not on PATH"; fi
 done
-if have go; then
-    gov=$(go version | awk '{print $3}' | sed 's/^go//')
-    if version_ge "$gov" "1.25"; then pass "go" "$gov"; else fails "go" "$gov, need 1.25+"; fi
-else
-    fails "go" "not on PATH"
+# TEMPORARY — Phase A only. Go stopped being a prerequisite when market data
+# moved to OpenBB; it matters again only while the legacy server is switched on.
+if [ "$MARKET_DATA_LEGACY_ENABLED" = "true" ]; then
+    if have go; then
+        gov=$(go version | awk '{print $3}' | sed 's/^go//')
+        if version_ge "$gov" "1.25"; then pass "go" "$gov (legacy market data)"
+        else fails "go" "$gov, need 1.25+ for the legacy market-data server"; fi
+    else
+        fails "go" "not on PATH, and MARKET_DATA_LEGACY_ENABLED=true needs it"
+        fix "install Go, or set MARKET_DATA_LEGACY_ENABLED=false in .env"
+    fi
 fi
 have_java && pass "java" "$(java -version 2>&1 | head -1 | sed 's/.*"\(.*\)".*/\1/')" \
     || info "java" "no runtime (Interactive Brokers only)"
@@ -53,7 +59,7 @@ have_node && pass "node" "$(node -v 2>/dev/null)" \
 # ── Repositories ─────────────────────────────────────────────────────────────
 
 group "Repositories"
-for repo in InvestPal MarketDataMcpServer AlpacaMcpServer CoinbaseMcpServer; do
+for repo in InvestPal AlpacaMcpServer CoinbaseMcpServer; do
     if [ -d "$REPO_DIR/$repo" ]; then pass "$repo"; else
         fails "$repo" "not cloned"; fix "make setup"
     fi
@@ -62,6 +68,24 @@ if [ -d "$REPO_DIR/InteractiveBrokersMcpServer" ]; then
     pass "InteractiveBrokersMcpServer"
 else
     info "InteractiveBrokersMcpServer" "not cloned (optional)"
+fi
+
+# Market data is no longer a cloned repo: it is a pinned venv this repo owns.
+# start.sh refuses to launch without it, so a missing one is a failure, not a
+# warning. Version drift matters too — the two instances are configured against
+# openbb-mcp-server 1.4.1 flag semantics.
+if [ -x "$(openbb_bin)" ]; then
+    obb_ver=$("$REPO_DIR/.venvs/openbb/bin/python" -c \
+        'import importlib.metadata as m; print(m.version("openbb-mcp-server"))' 2>/dev/null) || obb_ver=""
+    case "$obb_ver" in
+        1.4.1) pass "OpenBB venv" "openbb-mcp-server $obb_ver" ;;
+        "")    warns "OpenBB venv" "present but the version could not be read" ;;
+        *)     warns "OpenBB venv" "openbb-mcp-server $obb_ver, pinned to 1.4.1"
+               fix "make install — the category and discovery flags are 1.4.1 semantics" ;;
+    esac
+else
+    fails "OpenBB venv" "missing — market data cannot start"
+    fix "make install"
 fi
 
 # The SessionStart hook runs `uv run --project InvestPal`, so an unsynced venv
@@ -106,12 +130,22 @@ else
     pass "LLM_MODEL" "$LLM_MODEL"
 fi
 
-case "$SEC_EDGAR_USER_AGENT" in
-    ""|*example.com*)
-        warns "SEC_EDGAR_USER_AGENT" "placeholder contact address"
-        fix "EDGAR returns 403 without a real one; set it in .env" ;;
-    *) pass "SEC_EDGAR_USER_AGENT" ;;
-esac
+# Free, registration-only, and the one market-data key that is not really
+# optional: commodity spot prices and most Federal Reserve series have no other
+# free provider, and middleware.py turns the resulting failure into a message
+# the model reads rather than an error anyone sees.
+if [ -n "$FRED_API_KEY" ]; then
+    pass "FRED_API_KEY" "set"
+else
+    warns "FRED_API_KEY" "unset — commodities and most Fed series return nothing"
+    fix "free key at https://fredaccount.stlouisfed.org/apikeys, then .env.secrets"
+fi
+if [ -n "$FMP_API_KEY" ]; then
+    pass "FMP_API_KEY" "set"
+else
+    info "FMP_API_KEY" "unset — ratios, world news, estimates and peers unavailable"
+    fix "optional; see docs/market-data.md for what it unlocks"
+fi
 
 # ── Backend agent ────────────────────────────────────────────────────────────
 # No key at all is a perfectly good cockpit-only install, never a failure.
@@ -170,11 +204,6 @@ lint_service_env() { # lint_service_env DIR
 for d in InvestPal AlpacaMcpServer CoinbaseMcpServer InteractiveBrokersMcpServer; do
     [ -d "$REPO_DIR/$d" ] && lint_service_env "$d"
 done
-if [ -f "$REPO_DIR/MarketDataMcpServer/.env" ]; then
-    warns "MarketDataMcpServer/.env" "still present but superseded by the root config"
-else
-    info "MarketDataMcpServer/.env" "absent (root config is authoritative)"
-fi
 
 # ── Ports ────────────────────────────────────────────────────────────────────
 
@@ -184,7 +213,8 @@ if [ -f "$REPO_DIR/.mcp.json" ] && have python3; then
 import json, re, sys
 expected = {
     "investpal": "$INVESTPAL_MCP_PORT",
-    "market-data": "$MARKET_DATA_PORT",
+    # Claude clients get the discovery instance, not the static one.
+    "market-data": "$MARKET_DATA_DISCOVERY_PORT",
     "alpaca": "$ALPACA_MCP_PORT",
     "coinbase": "$COINBASE_MCP_PORT",
     "interactive-brokers": "$IB_MCP_PORT",
@@ -212,7 +242,8 @@ fi
 
 for entry in "InvestPal REST API:$INVESTPAL_API_PORT:investpal-api" \
              "InvestPal MCP App:$INVESTPAL_MCP_PORT:investpal-mcp" \
-             "MarketDataMcpServer:$MARKET_DATA_PORT:market-data-mcp" \
+             "Market Data (OpenBB):$MARKET_DATA_PORT:market-data-mcp" \
+             "Market Data Discovery:$MARKET_DATA_DISCOVERY_PORT:market-data-discovery-mcp" \
              "AlpacaMcpServer:$ALPACA_MCP_PORT:alpaca-mcp" \
              "CoinbaseMcpServer:$COINBASE_MCP_PORT:coinbase-mcp"; do
     label="${entry%%:*}"; rest="${entry#*:}"; port="${rest%%:*}"; svc="${rest#*:}"
@@ -266,7 +297,12 @@ check_service() { # check_service LABEL PID_NAME PORT [mcp]
 }
 check_service "InvestPal REST API" investpal-api "$INVESTPAL_API_PORT"
 check_service "InvestPal MCP App"  investpal-mcp "$INVESTPAL_MCP_PORT" mcp
-check_service "MarketDataMcpServer" market-data-mcp "$MARKET_DATA_PORT" mcp
+check_service "Market Data (OpenBB)" market-data-mcp "$MARKET_DATA_PORT" mcp
+check_service "Market Data Discovery" market-data-discovery-mcp "$MARKET_DATA_DISCOVERY_PORT" mcp
+if [ "$MARKET_DATA_LEGACY_ENABLED" = "true" ]; then
+    # TEMPORARY — Phase A only.
+    check_service "Market Data (legacy Go)" market-data-legacy "$MARKET_DATA_LEGACY_PORT" mcp
+fi
 check_service "AlpacaMcpServer"    alpaca-mcp "$ALPACA_MCP_PORT" mcp
 check_service "CoinbaseMcpServer"  coinbase-mcp "$COINBASE_MCP_PORT" mcp
 if [ -d "$REPO_DIR/InteractiveBrokersMcpServer" ]; then

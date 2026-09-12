@@ -10,7 +10,6 @@ load_env
 
 # ── Check all repos exist ────────────────────────────────────────────────────
 echo "Checking repositories..."
-check_repo "MarketDataMcpServer"
 check_repo "AlpacaMcpServer"
 check_repo "CoinbaseMcpServer"
 check_repo "InvestPal"
@@ -22,17 +21,62 @@ echo "Starting services..."
 # say "some services" instead of claiming everything started.
 OPTIONAL_FAILED=false
 
-# ── 1. MarketDataMcpServer (required by InvestPal) ───────────────────────────
-# With the root config present PORT comes from the fan-out. Without it, fall
-# back to reading the service's own .env, as this script always did — noting
-# that the Go default is 8080 while the health gate below expects 8082.
-if ! root_config_present; then
-    MARKET_DATA_PORT=$(grep '^PORT=' "$REPO_DIR/MarketDataMcpServer/.env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')
-    MARKET_DATA_PORT="${MARKET_DATA_PORT:-8082}"
+# ── 1. Market data: two OpenBB instances ─────────────────────────────────────
+# One server setting decides this and it is server-wide, which is why there are
+# two processes rather than one:
+#
+#   8082  static, --default-categories, ~153 tools always enabled.
+#         InvestPal's two LangChain agents bind their tool list at construction
+#         time and open a fresh MCP session per call, so discovery mode would
+#         leave them looking at six admin tools forever.
+#   8083  --tool-discovery, ~6 admin tools, all 287 reachable per session.
+#         Claude Code and Claude Desktop hold a persistent session, so
+#         activate_tools' per-session enabling actually works for them. This is
+#         the one .mcp.json points at.
+#
+# Both load the full OpenBB platform, so first start is slow and the timeouts
+# below are generous. The static instance is required — InvestPal dies in
+# pydantic at import without MARKET_DATA_MCP_SERVER_URL answering — while the
+# discovery instance is optional, so a cockpit-only failure does not abort
+# `make start` for the backend.
+if [ ! -x "$(openbb_bin)" ]; then
+    echo -e "${RED}Error:${NC} $(openbb_bin) not found. Run 'make install' first."
+    exit 1
 fi
+
 collect_env market-data-mcp
-start_service "market-data-mcp" "$MARKET_DATA_PORT" "$REPO_DIR/MarketDataMcpServer" "make run_mcp_server" "${ENV_PAIRS[@]}"
-wait_for_service "MarketDataMcpServer" "market-data-mcp" "$MARKET_DATA_PORT"
+start_service "market-data-mcp" "$MARKET_DATA_PORT" "$REPO_DIR" \
+    "$(openbb_cmd "$MARKET_DATA_PORT" --default-categories "$MARKET_DATA_CATEGORIES")" \
+    "${ENV_PAIRS[@]}"
+wait_for_service "Market Data (OpenBB)" "market-data-mcp" "$MARKET_DATA_PORT" 90
+
+collect_env market-data-discovery-mcp
+start_service "market-data-discovery-mcp" "$MARKET_DATA_DISCOVERY_PORT" "$REPO_DIR" \
+    "$(openbb_cmd "$MARKET_DATA_DISCOVERY_PORT" --tool-discovery)" \
+    "${ENV_PAIRS[@]}"
+wait_for_service "Market Data Discovery" "market-data-discovery-mcp" "$MARKET_DATA_DISCOVERY_PORT" 90 optional \
+    || OPTIONAL_FAILED=true
+
+# ── 1b. Legacy Go market-data server ─────────────────────────────────────────
+# TEMPORARY — Phase A of the OpenBB cutover, and nothing else. It runs on its
+# own port with nothing pointed at it, so that answers from the two servers can
+# be compared side by side during the changeover and a rollback is one env var
+# (MARKET_DATA_MCP_SERVER_URL) rather than a redeploy.
+#
+# Off unless MARKET_DATA_LEGACY_ENABLED=true in .env, and always optional. At
+# Phase C, delete this block, the market-data-legacy case in lib.sh, the legacy
+# rows and defaults there, and the Go build in the Makefile.
+if [ "$MARKET_DATA_LEGACY_ENABLED" = "true" ]; then
+    if [ ! -d "$REPO_DIR/MarketDataMcpServer" ]; then
+        echo -e "  ${YELLOW}Skipping legacy market-data server:${NC} MarketDataMcpServer/ is not cloned."
+    else
+        collect_env market-data-legacy
+        start_service "market-data-legacy" "$MARKET_DATA_LEGACY_PORT" \
+            "$REPO_DIR/MarketDataMcpServer" "make run_mcp_server" "${ENV_PAIRS[@]}"
+        wait_for_service "Market Data (legacy Go)" "market-data-legacy" "$MARKET_DATA_LEGACY_PORT" 30 optional \
+            || OPTIONAL_FAILED=true
+    fi
+fi
 
 # ── 2. AlpacaMcpServer ───────────────────────────────────────────────────────
 # Optional, like Coinbase below. Without credentials the server still starts and

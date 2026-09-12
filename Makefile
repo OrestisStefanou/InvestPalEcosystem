@@ -1,6 +1,5 @@
 REPOS := \
 	https://github.com/OrestisStefanou/InvestPal \
-	https://github.com/OrestisStefanou/MarketDataMcpServer \
 	https://github.com/OrestisStefanou/AlpacaMcpServer \
 	https://github.com/OrestisStefanou/CoinbaseMcpServer \
 	https://github.com/OrestisStefanou/InteractiveBrokersMcpServer
@@ -74,8 +73,16 @@ pull:
 
 install:
 	@echo "Installing dependencies..."
-	@echo "  MarketDataMcpServer (Go)..."
-	@cd $(CURDIR)/MarketDataMcpServer && make install
+	@echo "  OpenBB market data (pinned uv venv)..."
+	@uv venv $(CURDIR)/.venvs/openbb
+	@# fastmcp<4 is load-bearing, not tidiness. openbb-mcp-server 1.4.1 declares
+	@# `fastmcp>=3.2.0` with no upper bound, so a fresh resolve picks up 4.x, and
+	@# on 4.x the discovery instance breaks silently: activate_category reports
+	@# "Activated 25 tools" but list_tools still shows only the admin tools and
+	@# calling one returns "Unknown tool". Global mcp.disable() and session-scoped
+	@# ctx.enable_components() stopped composing across the major version. Verified
+	@# broken on 4.0.3, verified working on 3.4.7.
+	@uv pip install --python $(CURDIR)/.venvs/openbb/bin/python "openbb==4.7.2" "openbb-mcp-server==1.4.1" "fastmcp<4"
 	@echo "  InvestPal (Python/uv)..."
 	@cd $(CURDIR)/InvestPal && uv sync
 	@echo "  AlpacaMcpServer (Python/uv)..."
@@ -85,6 +92,15 @@ install:
 	@if [ -d "$(CURDIR)/InteractiveBrokersMcpServer" ]; then \
 		echo "  InteractiveBrokersMcpServer (Python/uv)..."; \
 		cd $(CURDIR)/InteractiveBrokersMcpServer && uv sync; \
+	fi
+# TEMPORARY — Phase A of the OpenBB cutover. The Go market-data server is no
+# longer cloned by `make clone`, but while an existing clone is still on disk
+# and MARKET_DATA_LEGACY_ENABLED=true in .env it is built so `make start` can
+# run it alongside OpenBB on MARKET_DATA_LEGACY_PORT. Delete this block, and
+# the matching one in scripts/start.sh, at Phase C. See docs/market-data.md.
+	@if [ -d "$(CURDIR)/MarketDataMcpServer" ] && command -v go >/dev/null 2>&1; then \
+		echo "  MarketDataMcpServer (Go, legacy, Phase A only)..."; \
+		cd $(CURDIR)/MarketDataMcpServer && make install; \
 	fi
 	@echo "Done."
 
