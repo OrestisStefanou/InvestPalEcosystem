@@ -1,6 +1,6 @@
 # Architecture
 
-InvestPal is five small services that run on your own machine. There is no hosted backend, no
+InvestPal is a handful of small services that run on your own machine. There is no hosted backend, no
 account and no tenancy. Everything is reachable on localhost, and all state lives in one local
 turso/SQLite file.
 
@@ -19,7 +19,8 @@ flowchart LR
     DB[("investpal.db<br/>local turso/SQLite")]
 
     subgraph servers["MCP servers"]
-        MD["Market Data<br/>Go :8082"]
+        MD["Market Data, OpenBB<br/>static :8082"]
+        MDD["Market Data, OpenBB<br/>discovery :8083"]
         AL["Alpaca<br/>Python :9091"]
         CB["Coinbase<br/>Python :9090"]
         IB["Interactive Brokers<br/>Python :9092"]
@@ -45,19 +46,28 @@ to the market data and brokerage servers directly**, as native MCP clients, rath
 through the REST layer. The core orchestrates those servers only on behalf of clients that cannot
 speak MCP themselves.
 
+Market data is two processes of the same OpenBB build because the setting that separates them is
+server-wide. The core reaches the static instance on 8082, which has a fixed set of around 153
+tools always enabled. Claude Code and Claude Desktop reach the discovery instance on 8083, which
+starts with everything disabled and lets a client switch categories on within its own session.
+The core cannot use discovery: it opens a fresh MCP session per tool call and binds its tool list
+when the agent is constructed. See [Market data](market-data.md).
+
 ## Services
 
 | Service | Language | Port | Repository |
 |---|---|---|---|
 | InvestPal core (REST API + MCP app) | Python, FastAPI | 8000 / 9000 | [InvestPal](https://github.com/OrestisStefanou/InvestPal) |
-| Market Data MCP server | Go | 8082 | [MarketDataMcpServer](https://github.com/OrestisStefanou/MarketDataMcpServer) |
+| Market Data, static | Python, OpenBB | 8082 | [OpenBB](https://github.com/OpenBB-finance/OpenBB), pinned venv at `.venvs/openbb` |
+| Market Data, discovery | Python, OpenBB | 8083 | Same build, `--tool-discovery` |
 | Alpaca MCP server | Python, FastMCP | 9091 | [AlpacaMcpServer](https://github.com/OrestisStefanou/AlpacaMcpServer) |
 | Coinbase MCP server | Python, FastMCP | 9090 | [CoinbaseMcpServer](https://github.com/OrestisStefanou/CoinbaseMcpServer) |
 | Interactive Brokers MCP server | Python, FastMCP | 9092 | [InteractiveBrokersMcpServer](https://github.com/OrestisStefanou/InteractiveBrokersMcpServer) |
 | IB Client Portal Gateway | Java | 5000 | Interactive Brokers' own gateway, started only if installed |
 
 The three brokerage servers are optional. InvestPal is fully functional as a research tool on
-market data alone.
+market data alone. The discovery market-data instance is optional too: only the Claude clients
+use it, so `make start` warns rather than aborting if it fails. The static one is required.
 
 See [Service Overview](../README.md#service-overview) in the README for startup order and health
 gating.
@@ -105,7 +115,8 @@ timer. See [Turso Cloud sync](../README.md#turso-cloud-sync).
 | Server | Tools | Reference |
 |---|---|---|
 | InvestPal MCP app | 26 tools plus one prompt: profile, memory, reminders, workflows, skills, utility | [`InvestPal/docs/mcp_api.md`](https://github.com/OrestisStefanou/InvestPal/blob/main/docs/mcp_api.md) |
-| Market Data | 20 tools, no API keys required | [MarketDataMcpServer README](https://github.com/OrestisStefanou/MarketDataMcpServer#readme) |
+| Market Data, static (8082) | ~153 tools across equity, etf, crypto, currency, economy, news, index, commodity and regulators. Most work with no key | [Market data](market-data.md) |
+| Market Data, discovery (8083) | ~6 admin tools, all 287 reachable per session | [Market data](market-data.md) |
 | Alpaca | 6 tools; the order-placing tool is hidden when `ALPACA_READ_ONLY=true` | [AlpacaMcpServer README](https://github.com/OrestisStefanou/AlpacaMcpServer#readme) |
 | Coinbase | 5 tools; same read-only switch | [CoinbaseMcpServer README](https://github.com/OrestisStefanou/CoinbaseMcpServer#readme) |
 | Interactive Brokers | 14 tools; the three write tools disappear under `IB_READ_ONLY=true` | [InteractiveBrokersMcpServer README](https://github.com/OrestisStefanou/InteractiveBrokersMcpServer#readme) |
@@ -127,21 +138,26 @@ Worth stating plainly, because it is the part with real money attached.
 
 ## Data sources
 
-The market data server draws on public sources and needs no paid subscription.
+OpenBB fronts 32 providers. No paid subscription is required, and no data leaves the machine
+except the provider requests themselves.
 
 | Source | Used for | Key |
 |---|---|---|
-| FRED | Economic indicators, commodities | none |
-| Frankfurter (ECB reference rates) | Currency exchange rates | none |
-| SEC EDGAR | Insider transactions (Form 4) | none, but a real contact address is required in the User-Agent |
-| stockanalysis.com | Stocks, ETFs, sectors, financials, news | none |
-| dataroma.com | Super investor portfolios | none |
-| CoinGecko | Cryptocurrency search and data | optional |
-| CoinDesk, CoinTelegraph RSS | Cryptocurrency news | none |
-| Polymarket Gamma | Prediction market odds | none |
+| Yahoo Finance (`yfinance`) | Prices, quotes, financial statements, key metrics, company news | none |
+| SEC EDGAR (`sec`) | Filings, financial statements, Form 4 insider trading, Form 13F holdings, MD&A | none |
+| Federal Reserve | Treasury rates, yield curve | none |
+| European Central Bank | Euro reference rates, euro-area yield curve | none |
+| IMF, OECD | International macro, CPI, country indicators | none |
+| Finviz, Cboe, FINRA, TMX, Seeking Alpha | Screeners, options, short interest, ETF holdings, earnings calendar | none |
+| **FRED** | Commodity spot prices, most Federal Reserve series | free, registration only, and in practice required |
+| Financial Modeling Prep | Ratios, worldwide news, analyst estimates, peer comparison, segment revenue | free tier, 250 req/day |
+
+The full tier-by-tier list, what each key unlocks, and how to set one:
+[Market data](market-data.md).
 
 ## Related
 
+- [Market data](market-data.md), the OpenBB instances and their providers
 - [Skills](skills.md), the fifteen analytical procedures the advisor follows
 - [Claude Code cockpit](claude-code-cockpit.md)
 - [Claude Desktop](claude-desktop.md)

@@ -1,6 +1,7 @@
 .env
 .env.secrets
 logs/
+.venvs/
 InvestPal/
 MarketDataMcpServer/
 AlpacaMcpServer/
@@ -8,3 +9,4 @@ CoinbaseMcpServer/
 InteractiveBrokersMcpServer/
 scripts/claude_cockpit/__pycache__/
 .DS_Store
+certs/

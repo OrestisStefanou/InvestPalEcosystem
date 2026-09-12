@@ -1,6 +1,6 @@
 # Using InvestPal with Claude Desktop
 
-Claude Desktop can connect to the InvestPal backend services via the Model Context Protocol (MCP). Once configured, Claude has access to real-time market data, your investment advisor profile, reminders, and — optionally — your Alpaca, Coinbase and Interactive Brokers accounts, all within the normal Claude Desktop chat interface.
+Claude Desktop can connect to the InvestPal backend services via the Model Context Protocol (MCP). Once configured, Claude has access to market data, your investment advisor profile, reminders, and — optionally — your Alpaca, Coinbase and Interactive Brokers accounts, all within the normal Claude Desktop chat interface.
 
 ---
 
@@ -28,7 +28,9 @@ Edit `claude_desktop_config.json` and add (or merge) an `mcpServers` section.
 
 ### Minimal setup (conversational only — no trading)
 
-This gives Claude access to real-time market data and the InvestPal advisor tools (user profile, memory, reminders):
+This gives Claude access to market data and the InvestPal advisor tools (user profile, memory, reminders).
+
+Port 8083 is deliberate. Market data runs as two OpenBB instances: 8082 is a fixed set of around 153 tools used by InvestPal's own backend agent, and 8083 runs tool discovery. Claude Desktop holds a session open, so discovery suits it — it starts at about six admin tools and switches categories on as a conversation needs them, instead of loading 153 tool definitions into every context. See [Market data](market-data.md).
 
 ```json
 {
@@ -37,7 +39,7 @@ This gives Claude access to real-time market data and the InvestPal advisor tool
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://127.0.0.1:8082/mcp"
+        "http://127.0.0.1:8083/mcp"
       ]
     },
     "InvestPal MCP Server": {
@@ -62,7 +64,7 @@ Add the Alpaca, Coinbase and Interactive Brokers entries to include brokerage to
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://127.0.0.1:8082/mcp"
+        "http://127.0.0.1:8083/mcp"
       ]
     },
     "InvestPal MCP Server": {
@@ -121,7 +123,7 @@ Once connected, Claude has access to:
 
 | Server | Tools |
 |---|---|
-| Market Data MCP Server | Stock/ETF/crypto quotes, company profiles, sector data, economic indicators, market news, commodity prices |
+| Market Data MCP Server | Around six discovery tools at first (`available_categories`, `activate_category`, `activate_tools`). Through those: prices and quotes, company profiles, SEC filings, financial statements, insider and institutional ownership, ETFs, economic indicators, commodities, news. Ask Claude to activate a category before expecting a specific tool |
 | InvestPal MCP Server | User profile (read/update), conversation notes (read/update), reminders (CRUD), advisor prompt |
 | Alpaca MCP Server *(optional)* | Portfolio positions, account info, order placement |
 | Coinbase MCP Server *(optional)* | Crypto portfolio, order placement |

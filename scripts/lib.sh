@@ -93,6 +93,16 @@ load_env() {
     # Defaults for anything the files did not set, so every caller can rely on
     # these being populated. These mirror .env.example.
     : "${MARKET_DATA_PORT:=8082}"
+    : "${MARKET_DATA_DISCOVERY_PORT:=8083}"
+    # Top-level OpenBB categories the static instance enables. --default-categories
+    # is the only category flag that has any effect in openbb-mcp-server 1.4.1;
+    # --allowed-categories is parsed and then never read, so do not reach for it.
+    # Matching is on the top-level tag only — subcategory granularity exists only
+    # inside the discovery tools.
+    : "${MARKET_DATA_CATEGORIES:=equity,etf,crypto,currency,economy,news,index,commodity,regulators}"
+    # TEMPORARY — Phase A of the OpenBB cutover. See docs/market-data.md.
+    : "${MARKET_DATA_LEGACY_ENABLED:=false}"
+    : "${MARKET_DATA_LEGACY_PORT:=8084}"
     : "${INVESTPAL_API_PORT:=8000}"
     : "${INVESTPAL_MCP_PORT:=9000}"
     : "${COINBASE_MCP_PORT:=9090}"
@@ -198,11 +208,44 @@ service_env() {
     root_config_present || return 0
 
     case "$1" in
-        market-data-mcp)
-            emit PORT "$MARKET_DATA_PORT"
+        market-data-mcp|market-data-discovery-mcp)
+            # Everything else about these two is a CLI flag (start.sh), so the
+            # ecosystem stays self-contained and the two instances cannot collide
+            # on ~/.openbb_platform/mcp_settings.json.
+            #
+            # ONLY market-data credentials belong here.
+            # openbb_core/app/model/credentials.py sweeps every environment
+            # variable whose name ends in API_KEY into OpenBB's credential set,
+            # so an LLM or brokerage key that reaches this process is silently
+            # adopted as a data-provider credential. openbb_scrub_env (below)
+            # is the belt to this braces: load_env exports the whole of
+            # .env.secrets into the calling shell, so not emitting a value here
+            # is not by itself enough to keep it out of the child.
+            emit FRED_API_KEY "$FRED_API_KEY"
+            emit FMP_API_KEY "$FMP_API_KEY"
+
+            # TLS trust. yfinance talks to Yahoo through curl_cffi, which
+            # bundles its own OpenSSL and certifi store instead of consulting
+            # the macOS keychain. Behind a TLS-inspecting proxy (Cloudflare
+            # Zero Trust, Zscaler, corporate MITM) the inspection root is
+            # trusted by the keychain but absent from that store, so yfinance
+            # fails to verify and OpenBB returns ZERO ROWS WITHOUT AN ERROR.
+            # certs/ca-bundle.pem is certifi plus any local inspection root;
+            # scripts/setup.sh builds it. All three names are set because the
+            # providers do not agree on one: curl_cffi reads CURL_CA_BUNDLE,
+            # requests reads REQUESTS_CA_BUNDLE, and stdlib ssl reads
+            # SSL_CERT_FILE.
+            if [ -f "$REPO_DIR/certs/ca-bundle.pem" ]; then
+                emit CURL_CA_BUNDLE "$REPO_DIR/certs/ca-bundle.pem"
+                emit REQUESTS_CA_BUNDLE "$REPO_DIR/certs/ca-bundle.pem"
+                emit SSL_CERT_FILE "$REPO_DIR/certs/ca-bundle.pem"
+            fi
+            ;;
+        market-data-legacy)
+            # TEMPORARY — Phase A only. The retired Go server, run alongside
+            # OpenBB on MARKET_DATA_LEGACY_PORT so a rollback is one env var.
+            emit PORT "$MARKET_DATA_LEGACY_PORT"
             emit SEC_EDGAR_USER_AGENT "$SEC_EDGAR_USER_AGENT"
-            emit COIN_GECKO_API_KEY "$COIN_GECKO_API_KEY"
-            emit CACHE_TTL "$CACHE_TTL"
             ;;
         alpaca-mcp)
             emit MCP_PORT "$ALPACA_MCP_PORT"
@@ -238,8 +281,18 @@ service_env() {
             # always supplied and never asked for during setup.
             emit LLM_PROVIDER "$LLM_PROVIDER"
             emit LLM_MODEL "$LLM_MODEL"
+            # The STATIC OpenBB instance. InvestPal's two LangChain agents bind a
+            # tool list at construction time and langchain_mcp_adapters opens a
+            # fresh session per call, so they cannot use the discovery instance:
+            # they would see the admin tools and never get past them.
             emit MARKET_DATA_MCP_SERVER_URL "http://localhost:$MARKET_DATA_PORT/mcp"
             emit MCP_APP_SERVER_PORT "$INVESTPAL_MCP_PORT"
+            # The rate-limit middleware's list of tools worth pacing. The code
+            # default in InvestPal/config.py carries only InvestPal's own tool
+            # names; the market-data names live here so no vendor name is
+            # hardcoded in Python. pydantic-settings parses a list[str] field
+            # from the environment as JSON, so the value must be valid JSON.
+            emit TOKEN_INTENSIVE_TOOLS "$TOKEN_INTENSIVE_TOOLS"
             emit TURSO_DB_PATH "$TURSO_DB_PATH"
             emit EMBEDDING_ENABLED "$EMBEDDING_ENABLED"
 
@@ -292,6 +345,50 @@ collect_env() {
     while IFS= read -r line; do
         [ -n "$line" ] && ENV_PAIRS+=("$line")
     done < <(service_env "$1")
+}
+
+# ── OpenBB market data ───────────────────────────────────────────────────────
+
+# Absolute path to the pinned OpenBB entry point. Created by `make install`
+# (uv venv + openbb==4.7.2, openbb-mcp-server==1.4.1). Deliberately not the
+# ad-hoc venv under ~/code/openbb: that is scratch, not a dependency.
+openbb_bin() { printf '%s' "$REPO_DIR/.venvs/openbb/bin/openbb-mcp"; }
+
+# Strip every credential that is not a market-data key out of the CURRENT shell.
+# Called inside the launch subshell, immediately before exec'ing an OpenBB
+# instance, and nowhere else.
+#
+# This is not paranoia. load_env sources .env.secrets under `set -a`, so every
+# key in it is exported and inherited by every child process start.sh forks —
+# whatever service_env did or did not emit. And OpenBB's
+# openbb_core/app/model/credentials.py adopts any environment variable whose
+# name ends in API_KEY as a data-provider credential. Without this, the
+# Anthropic, OpenAI, Google, Alpaca and Coinbase keys all land in OpenBB's
+# credential set, on a process that talks to 32 third-party data providers.
+#
+# The match is on shape rather than on a fixed list, so a credential added to
+# .env.secrets later is covered without anyone remembering to come back here.
+openbb_scrub_env() {
+    local name
+    for name in $(env | sed -n 's/^\([A-Za-z_][A-Za-z_0-9]*\)=.*/\1/p' |
+                  grep -E '(API_KEY|API_SECRET|AUTH_TOKEN|TOKEN|SECRET|PASSWORD)$' |
+                  sort -u); do
+        case "$name" in
+            FRED_API_KEY|FMP_API_KEY) continue ;;
+        esac
+        unset "$name"
+    done
+    return 0
+}
+
+# The command string start_service evals for an OpenBB instance. exec, so the
+# recorded PID is the server itself rather than a wrapper.
+#
+#   openbb_cmd <port> [extra flags ...]
+openbb_cmd() {
+    local port="$1"; shift
+    printf 'openbb_scrub_env; exec %s --transport streamable-http --host 127.0.0.1 --port %s %s' \
+        "$(openbb_bin)" "$port" "$*"
 }
 
 # ── Process lifecycle ────────────────────────────────────────────────────────
@@ -445,7 +542,12 @@ kill_tree() {
 service_rows() {
     echo "InvestPal REST API|investpal-api|$INVESTPAL_API_PORT"
     echo "InvestPal MCP App|investpal-mcp|$INVESTPAL_MCP_PORT"
-    echo "MarketDataMcpServer|market-data-mcp|$MARKET_DATA_PORT"
+    echo "Market Data (OpenBB)|market-data-mcp|$MARKET_DATA_PORT"
+    echo "Market Data Discovery|market-data-discovery-mcp|$MARKET_DATA_DISCOVERY_PORT"
+    # TEMPORARY — Phase A only. Listed only while it is switched on.
+    if [ "$MARKET_DATA_LEGACY_ENABLED" = "true" ]; then
+        echo "Market Data (legacy Go)|market-data-legacy|$MARKET_DATA_LEGACY_PORT"
+    fi
     echo "AlpacaMcpServer|alpaca-mcp|$ALPACA_MCP_PORT"
     echo "CoinbaseMcpServer|coinbase-mcp|$COINBASE_MCP_PORT"
     if [ -d "$REPO_DIR/InteractiveBrokersMcpServer" ]; then

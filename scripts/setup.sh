@@ -107,10 +107,6 @@ import_kv() { # import_kv SRC_FILE SRC_KEY DEST_FILE DEST_KEY
     return 0
 }
 
-version_ge() { # version_ge HAVE WANT
-    [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1)" = "$2" ]
-}
-
 # ── 1. Prerequisites ─────────────────────────────────────────────────────────
 
 hint() {
@@ -141,21 +137,6 @@ check_prereqs() {
     else
         bad "uv" "missing"
         note "curl -LsSf https://astral.sh/uv/install.sh | sh"
-        missing=1
-    fi
-
-    if have go; then
-        local gov
-        gov=$(go version | awk '{print $3}' | sed 's/^go//')
-        if version_ge "$gov" "1.25"; then
-            ok "go" "$gov"
-        else
-            bad "go" "$gov, need 1.25+"
-            missing=1
-        fi
-    else
-        bad "go" "missing"
-        note "$(hint go)"
         missing=1
     fi
 
@@ -201,7 +182,6 @@ install_deps() {
 
 import_service_env() {
     local investpal="$REPO_DIR/InvestPal/.env"
-    local marketdata="$REPO_DIR/MarketDataMcpServer/.env"
     local alpaca="$REPO_DIR/AlpacaMcpServer/.env"
     local coinbase="$REPO_DIR/CoinbaseMcpServer/.env"
     local ib="$REPO_DIR/InteractiveBrokersMcpServer/.env"
@@ -220,19 +200,6 @@ import_service_env() {
         import_kv "$investpal" GOOGLE_API_KEY            "$SECRETS_FILE" GOOGLE_API_KEY
         import_kv "$investpal" TURSO_SYNC_AUTH_TOKEN     "$SECRETS_FILE" TURSO_SYNC_AUTH_TOKEN
         IMPORTED_FROM+=("$investpal")
-    fi
-
-    if [ -f "$marketdata" ]; then
-        ok "MarketDataMcpServer/.env" "$(grep -cE '^[A-Za-z]' "$marketdata") keys imported"
-        import_kv "$marketdata" PORT                 "$ENV_FILE" MARKET_DATA_PORT
-        import_kv "$marketdata" CACHE_TTL            "$ENV_FILE" CACHE_TTL
-        # A CoinGecko key is a credential, so it goes in the protected file.
-        import_kv "$marketdata" COIN_GECKO_API_KEY   "$SECRETS_FILE" COIN_GECKO_API_KEY
-        import_kv "$marketdata" SEC_EDGAR_USER_AGENT "$ENV_FILE" SEC_EDGAR_USER_AGENT
-        if [ -n "$(env_get "$marketdata" ALPHA_VANTAGE_API_KEY)" ]; then
-            note "ALPHA_VANTAGE_API_KEY dropped — no Go source references it any more"
-        fi
-        IMPORTED_FROM+=("$marketdata")
     fi
 
     if [ -f "$alpaca" ]; then
@@ -293,24 +260,6 @@ configure() {
         chmod 600 "$SECRETS_FILE"
 
         import_service_env
-
-        # The only question with no usable default. EDGAR 403s a User-Agent that
-        # carries no contact address.
-        local current email
-        current=$(env_get "$ENV_FILE" SEC_EDGAR_USER_AGENT)
-        case "$current" in
-            ""|*you@example.com*|*contact@example.com*)
-                echo ""
-                ask email "Contact email for SEC EDGAR (Enter to skip)" ""
-                if [ -n "$email" ]; then
-                    set_kv "$ENV_FILE" SEC_EDGAR_USER_AGENT "InvestPal/1.0 ($email)"
-                    ok "SEC_EDGAR_USER_AGENT" "set"
-                else
-                    warn "SEC_EDGAR_USER_AGENT" "using placeholder"
-                    note "SEC filings may return 403 until you set a real address in .env"
-                fi
-                ;;
-        esac
 
         retire_service_env
         ok ".env" "written"
@@ -470,9 +419,97 @@ configure_turso_sync() {
     load_env
 }
 
+# OpenBB needs no credential for most of what InvestPal asks of it, but FRED is
+# the exception worth asking about rather than documenting: commodity spot
+# prices and most Federal Reserve series have no other free provider, so with no
+# key those tools return nothing — silently, because middleware.py swallows tool
+# errors into a message the model reads rather than raising.
+configure_market_data() {
+    local key
+
+    if [ -z "$(env_get "$SECRETS_FILE" FRED_API_KEY)" ] || [ "$FORCE" = "1" ]; then
+        echo ""
+        note "Market data works without any key: stock prices, filings, financial"
+        note "statements, ETFs and international macro are all free."
+        note "One exception. Commodity prices and most Fed series come only from"
+        note "FRED, so they go blank without its key. The key is free and takes a"
+        note "minute: https://fredaccount.stlouisfed.org/apikeys"
+        ask_secret key "FRED_API_KEY (Enter to skip)"
+        if [ -n "$key" ]; then
+            set_kv "$SECRETS_FILE" FRED_API_KEY "$key"
+            ok "FRED" "configured"
+        else
+            warn "FRED" "no key — commodities and most Fed series unavailable"
+            note "Add FRED_API_KEY to .env.secrets later and restart market data."
+        fi
+    else
+        ok "FRED" "already configured"
+    fi
+
+    if [ -z "$(env_get "$SECRETS_FILE" FMP_API_KEY)" ] || [ "$FORCE" = "1" ]; then
+        echo ""
+        note "Financial Modeling Prep is optional and free up to 250 requests/day."
+        note "It adds financial ratios, worldwide news, revenue by segment and"
+        note "geography, analyst estimates, peer comparison and earnings-call"
+        note "transcripts. See docs/market-data.md."
+        if ask_yn "Add an FMP key?" "n"; then
+            ask_secret key "FMP_API_KEY"
+            if [ -n "$key" ]; then
+                set_kv "$SECRETS_FILE" FMP_API_KEY "$key"
+                ok "FMP" "configured"
+            fi
+        else
+            ok "FMP" "skipped"
+        fi
+    else
+        ok "FMP" "already configured"
+    fi
+
+    build_ca_bundle
+}
+
+# OpenBB's yfinance provider goes through curl_cffi, which carries its own
+# OpenSSL and certifi store rather than reading the macOS keychain. Behind a
+# TLS-inspecting proxy the inspection root is trusted by the keychain but not
+# by that store, and the failure is silent: OpenBB returns zero rows and no
+# error. Build a bundle of certifi plus any local inspection root so the
+# providers can verify. scripts/lib.sh points the OpenBB services at it.
+build_ca_bundle() {
+    local bundle="$REPO_DIR/certs/ca-bundle.pem"
+    local python="$REPO_DIR/.venvs/openbb/bin/python"
+    local certifi_pem extra
+
+    [ -x "$python" ] || { warns "CA bundle" "skipped, run 'make install' first"; return 0; }
+
+    certifi_pem=$("$python" -c 'import certifi; print(certifi.where())' 2>/dev/null) || {
+        warns "CA bundle" "could not locate certifi"; return 0; }
+
+    mkdir -p "$REPO_DIR/certs"
+    extra=$(mktemp)
+    # Any root whose CN marks it as an inspection CA. Add your own here if your
+    # proxy uses a different name.
+    security find-certificate -a -c "Gateway CA - Cloudflare Managed" -p \
+        /Library/Keychains/System.keychain >>"$extra" 2>/dev/null || true
+    security find-certificate -a -c "Zscaler" -p \
+        /Library/Keychains/System.keychain >>"$extra" 2>/dev/null || true
+
+    cat "$certifi_pem" "$extra" >"$bundle"
+    local n added
+    n=$(grep -c 'BEGIN CERTIFICATE' "$bundle" 2>/dev/null || echo 0)
+    added=$(grep -c 'BEGIN CERTIFICATE' "$extra" 2>/dev/null || echo 0)
+    rm -f "$extra"
+
+    if [ "$added" -gt 0 ]; then
+        ok "CA bundle" "$n certs, including $added local inspection root(s)"
+    else
+        ok "CA bundle" "$n certs, no TLS inspection detected"
+    fi
+}
+
 optional_integrations() {
     phase "Optional integrations"
     configure_backend_agent
+    configure_market_data
     configure_brokers
     configure_turso_sync
 }

@@ -28,7 +28,9 @@ Steps:
    - Launch a subagent (Task tool) whose goal is the workflow's `description`. The
      subagent must use the InvestPal skills (`getSkillDefinitions`, then `getSkill`
      for the relevant ones), market-data tools, and portfolio tools as needed, and
-     return a concise report.
+     return a concise report. The market-data server runs in tool-discovery mode, so
+     the subagent must call `available_categories` and `activate_category` before the
+     data tools appear in its own tool list.
    - Persist it: `storeWorkflowResult` with the `workflow_id`, `workflow_name` set to
      the workflow's `name`, and `output` set to the report.
 
