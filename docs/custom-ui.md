@@ -85,7 +85,7 @@ register no tools, so it simply has none to call.
 | `POST` | `/workflows/check-and-run` | Heartbeat: claim and execute any due workflows. Intended for an external cron |
 | `GET` | `/workflow_results` | Results of past workflow runs, most recent first (`?limit=10`) |
 
-The user's profile and conversation memory are not on the REST API — they are managed by the advisor itself over MCP (`getUserProfileNotes`, `createUserProfileNote`, `searchUserConversationNotes`, …). See [`InvestPal/docs/mcp_api.md`](../InvestPal/docs/mcp_api.md).
+The user's profile, holdings, tracked names and conversation memory are not on the REST API — they are managed by the advisor itself over MCP (`getUserProfileNotes`, `createUserProfileNote`, `getHoldings`, `upsertHolding`, `getTickerRecords`, `upsertTickerRecord`, `searchUserConversationNotes`, …). See [`InvestPal/docs/mcp_api.md`](../InvestPal/docs/mcp_api.md).
 
 > Call `POST /workflows/check-and-run` only if nothing else is executing workflows. The Claude Code cockpit executes them too; running both double-executes every workflow.
 

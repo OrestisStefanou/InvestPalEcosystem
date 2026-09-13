@@ -26,9 +26,9 @@ Design notes:
     ~8KB prompt pushed additionalContext past Claude Code's inline-output threshold,
     so it was truncated to a preview and most of the operating rules never reached
     the model's context. A small pointer is guaranteed to land in full. The profile
-    and reminder sections are inlined but budgeted (see CONTEXT_BUDGET_CHARS) for
-    the same reason: they must never grow enough to push the workflow instructions
-    out of context.
+    and reminder sections are inlined but budgeted (see PROFILE_BUDGET_CHARS and
+    REMINDERS_BUDGET_CHARS) for the same reason: they must never grow enough to
+    push the workflow instructions out of context.
   - InvestPal is a single-client project. Since the "Single user project migration"
     no InvestPal MCP tool or prompt takes a `user_id`, so this hook passes none.
   - Run via the InvestPal project's uv environment (which already has `fastmcp`
@@ -46,10 +46,22 @@ import tempfile
 MCP_URL = os.environ.get("INVESTPAL_MCP_URL", "http://127.0.0.1:9000/mcp")
 PERSONA_PROMPT_NAME = "get_invstment_advisor_prompt"  # name matches the backend (typo intentional)
 
-# Combined cap for the profile + reminder sections. Both grow without bound as the
-# client is used, and additionalContext is truncated to a preview once it gets too
-# large -- which would silently drop the workflow instructions below them.
-CONTEXT_BUDGET_CHARS = 1000
+# Caps for the profile and reminder sections. Both grow as the client is used, and
+# additionalContext is truncated to a preview once it gets too large -- which would
+# silently drop the workflow instructions below them.
+#
+# These were a single 1000-char budget split evenly, which was far too small: with 112
+# notes on file the profile section injected 5 of them and collapsed the rest into
+# "+107 more", dropping risk tolerance, goal, horizon and the liquidity constraint.
+#
+# The profile is now scoped to durable client facts (holdings and theses moved to their
+# own tables), but at ~14K chars it still does not fit inline: additionalContext is
+# truncated to a preview past roughly 8K, which would drop the workflow instructions
+# below it. So this stays a budget, not a full dump. What it buys is a useful head
+# start; the advisor prompt separately instructs a `getUserProfileNotes` call at session
+# init, which is the path to the complete profile.
+PROFILE_BUDGET_CHARS = 6000
+REMINDERS_BUDGET_CHARS = 1500
 
 
 def _emit(additional_context: str) -> None:
@@ -309,13 +321,13 @@ async def _build_context(session_id: str | None) -> str:
 
             try:
                 notes = _extract(await client.call_tool("getUserProfileNotes", {}))
-                profile_section = _profile_section(notes, CONTEXT_BUDGET_CHARS // 2)
+                profile_section = _profile_section(notes, PROFILE_BUDGET_CHARS)
             except Exception as exc:  # noqa: BLE001
                 profile_section = f"## Client profile\n\nCould not load profile notes: {exc}"
 
             try:
                 reminders = _extract(await client.call_tool("getAgentReminders", {}))
-                reminders_section = _reminders_section(reminders, CONTEXT_BUDGET_CHARS // 2)
+                reminders_section = _reminders_section(reminders, REMINDERS_BUDGET_CHARS)
             except Exception as exc:  # noqa: BLE001
                 reminders_section = f"## Open reminders\n\nCould not load reminders: {exc}"
 

@@ -122,7 +122,7 @@ Once connected, Claude has access to:
 | Server | Tools |
 |---|---|
 | Market Data MCP Server | Stock/ETF/crypto quotes, company profiles, sector data, economic indicators, market news, commodity prices |
-| InvestPal MCP Server | User profile (read/update), conversation notes (read/update), reminders (CRUD), advisor prompt |
+| InvestPal MCP Server | User profile (read/update), holdings (read/upsert/close), ticker records (read/upsert/delete), conversation notes (read/update), reminders (CRUD), advisor prompt |
 | Alpaca MCP Server *(optional)* | Portfolio positions, account info, order placement |
 | Coinbase MCP Server *(optional)* | Crypto portfolio, order placement |
 | Interactive Brokers MCP Server *(optional)* | Accounts, positions, balances, quotes, trades, transaction history, order placement |

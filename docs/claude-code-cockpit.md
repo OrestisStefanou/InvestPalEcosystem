@@ -75,6 +75,8 @@ On startup the `SessionStart` hook runs and injects three things into the sessio
    It is written to a temp file and the hook injects the path, because inlining the full prompt
    exceeded Claude Code's inline-output threshold and got truncated to a preview.
 2. **Your profile notes and open reminders**, so the first answer is already informed by them.
+   The profile is durable facts only; holdings and tracked names are read on demand with
+   `getHoldings` and `getTickerRecords`.
 3. **Any due scheduled workflows**, with instructions for the cockpit to execute them.
 
 Confirm the five MCP servers connected with:
@@ -94,7 +96,9 @@ tools fail until the IB Client Portal Gateway is running and logged in.
 Just talk to it. Your profile and reminders are already in context from the hook; on your first
 message it follows the persona, recalls relevant past conversations (semantically, via
 `searchUserConversationNotes`), and answers using the InvestPal skills, real-time market data,
-and (if credentials are configured) your portfolio.
+and your portfolio. Positions come from the broker tools when those are connected and
+reachable; otherwise from the stored `holdings` record, quoted with the date it was
+accurate rather than presented as current.
 
 ---
 
