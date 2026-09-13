@@ -15,6 +15,20 @@ reads the profile (one self-contained fact per note), `createUserProfileNote` ad
 replace. The SessionStart hook injects the profile and any open reminders, so you start
 informed without a tool round-trip.
 
+The profile is for **who the client is** and nothing else: age, risk tolerance, goals, horizon,
+income, expenses, liquidity constraints, sector preferences, and standing policies they have set
+for their own book. Four things that used to live there now have their own homes, and putting
+them back in the profile is the single most damaging memory mistake available to you:
+
+| What | Where |
+| --- | --- |
+| What the client owns, including cash and off-platform assets | `getHoldings` / `upsertHolding` / `closeHolding` |
+| Why a name is interesting: thesis, entry trigger, falsifier, status | `getTickerRecords` / `upsertTickerRecord` |
+| Anything dated: decisions, analysis, trades, advice given | `createUserConversationNote` |
+| How to value or screen a business | The skills (`getSkill`), not a note |
+
+Prices, market values, P&L and the risk-free rate are never stored anywhere. Fetch them.
+
 For conversation memory, prefer `searchUserConversationNotes` when looking for a specific
 topic (semantic, runs locally, no network) and `getUserConversationNotes` when reviewing what
 happened most recently. Write with `createUserConversationNote`; each call adds a note rather
@@ -36,11 +50,17 @@ Do not copy that prompt into this repo. The InvestPal MCP server is its single s
 
 | Server | Use |
 | --- | --- |
-| `investpal` | Profile notes, conversation memory (incl. semantic search), reminders, workflows, skills, math helpers |
+| `investpal` | Profile notes, holdings, ticker records, conversation memory (incl. semantic search), reminders, workflows, skills, math helpers |
 | `market-data` | Stocks, ETFs, crypto, economics, commodities, news |
 | `alpaca` | Stock/ETF portfolio and orders (the server needs `ALPACA_API_KEY` / `ALPACA_API_SECRET` in `.env.secrets`; without them it advertises no tools) |
 | `coinbase` | Crypto portfolio and orders (as above, with `COINBASE_API_KEY` / `COINBASE_API_SECRET`) |
 | `interactive-brokers` | IB accounts, positions, balances, quotes, trades and orders (no API keys; needs the IB Client Portal Gateway running and logged in) |
+
+A broker's own tools always outrank the stored `holdings` row for the same position: a row whose
+`source` is a broker is a cache. Read the broker when it is reachable and write the fresh figures
+back with `upsertHolding` (setting `as_of` to today) so the record survives the next outage. When
+a broker is down or unconfigured, the stored row is the best record there is — use it, but say
+what it is ("positions as of 16 Aug; the IB gateway is down") rather than presenting it as current.
 
 ## Scheduled workflows
 

@@ -163,8 +163,9 @@ turso_row_count() {
     local db="$1" total=0 answered=1 table n
     have sqlite3 || return 1
     [ -f "$db" ] || return 1
-    for table in user_profile_notes user_conversation_notes agent_reminders \
-                 agent_workflows workflow_results sessions session_messages; do
+    for table in user_profile_notes user_conversation_notes holdings \
+                 ticker_records agent_reminders agent_workflows \
+                 workflow_results sessions session_messages; do
         if n=$(sqlite3 -readonly "file:$db?immutable=1" \
                    "SELECT COUNT(*) FROM $table" 2>/dev/null) \
            && [ -n "$n" ]; then

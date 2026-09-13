@@ -84,7 +84,9 @@ server is required.
 
 | Data | Notes |
 |---|---|
-| User profile notes | What the advisor knows about you, superseded rather than deleted |
+| User profile notes | Who you are as an investor: goals, risk tolerance, horizon, constraints. Superseded rather than deleted |
+| Holdings | What you own, from a broker or recorded by hand. Every row carries a `source` and an `as_of`; broker rows are a cache refreshed from the broker when it is reachable. No prices or P&L |
+| Ticker records | Why a name is interesting: thesis, entry trigger, falsifier, and whether it is watched, held, exited or rejected. One row per ticker, updated in place |
 | Conversation notes | Searchable by meaning, not just keyword |
 | Note embeddings | 384-dimension vectors from `BAAI/bge-small-en-v1.5`, computed locally on CPU via fastembed. Note text is never sent anywhere to produce them. |
 | Reminders | Action items the advisor tracks for you |
@@ -104,7 +106,7 @@ timer. See [Turso Cloud sync](../README.md#turso-cloud-sync).
 
 | Server | Tools | Reference |
 |---|---|---|
-| InvestPal MCP app | 26 tools plus one prompt: profile, memory, reminders, workflows, skills, utility | [`InvestPal/docs/mcp_api.md`](https://github.com/OrestisStefanou/InvestPal/blob/main/docs/mcp_api.md) |
+| InvestPal MCP app | 29 tools plus one prompt: profile, holdings, ticker records, memory, reminders, workflows, skills, utility | [`InvestPal/docs/mcp_api.md`](https://github.com/OrestisStefanou/InvestPal/blob/main/docs/mcp_api.md) |
 | Market Data | 20 tools, no API keys required | [MarketDataMcpServer README](https://github.com/OrestisStefanou/MarketDataMcpServer#readme) |
 | Alpaca | 6 tools; the order-placing tool is hidden when `ALPACA_READ_ONLY=true` | [AlpacaMcpServer README](https://github.com/OrestisStefanou/AlpacaMcpServer#readme) |
 | Coinbase | 5 tools; same read-only switch | [CoinbaseMcpServer README](https://github.com/OrestisStefanou/CoinbaseMcpServer#readme) |
